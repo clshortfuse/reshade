@@ -330,6 +330,7 @@ reshade::api::sampler_desc reshade::d3d12::convert_sampler_desc(const D3D12_STAT
 	desc.compare_op = convert_compare_op(internal_desc.ComparisonFunc);
 	desc.min_lod = internal_desc.MinLOD;
 	desc.max_lod = internal_desc.MaxLOD;
+	desc.is_static = true;
 
 	switch (internal_desc.BorderColor)
 	{

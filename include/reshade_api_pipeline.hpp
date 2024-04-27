@@ -189,8 +189,13 @@ namespace reshade { namespace api
 		/// Type of the descriptors in this range.
 		/// </summary>
 		descriptor_type type = descriptor_type::sampler;
-	};
 
+		/// <summary>
+		/// Sampler description if type is sampler
+		/// </summary>
+		sampler_desc sampler_desc;
+	};
+	
 	/// <summary>
 	/// Describes a single parameter in a pipeline layout.
 	/// </summary>
@@ -226,6 +231,7 @@ namespace reshade { namespace api
 				uint32_t count;
 				const descriptor_range *ranges;
 			} descriptor_table;
+
 		};
 	};
 

@@ -127,6 +127,10 @@ namespace reshade { namespace api
 		/// Upper end of the mipmap range to clamp access to.
 		/// </summary>
 		float max_lod = +FLT_MAX;
+		/// <summary>
+		/// Specifies if sampler is static inside pipeline layout (DX12)
+		/// </summary>
+		bool is_static = false;
 	};
 
 	/// <summary>

@@ -2634,6 +2634,7 @@ bool D3D12Device::invoke_create_and_init_pipeline_layout_event(UINT node_mask, c
 					range.count = 1;
 					range.visibility = reshade::d3d12::convert_shader_visibility(sampler_data[sampler_index].ShaderVisibility);
 					range.type = reshade::api::descriptor_type::sampler;
+					range.sampler_desc = desc;
 				}
 
 				params[param_index].type = reshade::api::pipeline_layout_param_type::descriptor_table;
