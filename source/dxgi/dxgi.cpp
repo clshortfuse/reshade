@@ -314,9 +314,8 @@ UINT query_device(IUnknown *&device, com_ptr<IUnknown> &device_proxy)
 }
 
 template <typename T>
-static void init_swapchain_proxy(T *&swapchain, UINT direct3d_version, const com_ptr<IUnknown> &device_proxy, DXGI_USAGE usage, UINT sync_interval)
+static void init_swapchain_proxy(T *&swapchain, UINT direct3d_version, const com_ptr<IUnknown> &device_proxy, DXGI_USAGE usage, UINT sync_interval, DXGISwapChain*& swapchain_proxy)
 {
-	DXGISwapChain *swapchain_proxy = nullptr;
 
 	if ((usage & DXGI_USAGE_RENDER_TARGET_OUTPUT) == 0)
 	{
@@ -381,6 +380,7 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory_CreateSwapChain(IDXGIFactory *pFactory, I
 
 	DXGI_SWAP_CHAIN_DESC desc = *pDesc;
 	UINT sync_interval = UINT_MAX;
+	DXGI_SWAP_CHAIN_DESC original_desc = desc;
 	dump_and_modify_swapchain_desc(desc, sync_interval);
 
 	com_ptr<IUnknown> device_proxy;
@@ -395,7 +395,9 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory_CreateSwapChain(IDXGIFactory *pFactory, I
 		return hr;
 	}
 
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval);
+	DXGISwapChain *swapchain_proxy = nullptr;
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
+	swapchain_proxy->_current_swapchain_desc;
 
 	return hr;
 }
@@ -416,6 +418,7 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForHwnd(IDXGIFactory2 *pF
 		return DXGI_ERROR_INVALID_CALL;
 
 	DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
+	DXGI_SWAP_CHAIN_DESC1 original_desc = desc;
 	UINT sync_interval = UINT_MAX;
 	DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen_desc = {};
 	if (pFullscreenDesc != nullptr)
@@ -440,7 +443,9 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForHwnd(IDXGIFactory2 *pF
 		return hr;
 	}
 
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval);
+	DXGISwapChain *swapchain_proxy = nullptr;
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
+	swapchain_proxy->_current_swapchain_desc1 = original_desc;
 
 	return hr;
 }
@@ -460,6 +465,7 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForCoreWindow(IDXGIFactor
 		return DXGI_ERROR_INVALID_CALL;
 
 	DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
+	DXGI_SWAP_CHAIN_DESC1 original_desc = *pDesc;
 	UINT sync_interval = UINT_MAX;
 	// UWP applications cannot be set into fullscreen mode
 	dump_and_modify_swapchain_desc(desc, sync_interval);
@@ -476,7 +482,9 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForCoreWindow(IDXGIFactor
 		return hr;
 	}
 
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval);
+	DXGISwapChain *swapchain_proxy = nullptr;
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
+	swapchain_proxy->_current_swapchain_desc1 = original_desc;
 
 	return hr;
 }
@@ -496,6 +504,7 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForComposition(IDXGIFacto
 		return DXGI_ERROR_INVALID_CALL;
 
 	DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
+	DXGI_SWAP_CHAIN_DESC1 original_desc = *pDesc;
 	UINT sync_interval = UINT_MAX;
 	// Composition swap chains cannot be set into fullscreen mode
 	dump_and_modify_swapchain_desc(desc, sync_interval);
@@ -512,7 +521,9 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForComposition(IDXGIFacto
 		return hr;
 	}
 
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval);
+	DXGISwapChain *swapchain_proxy = nullptr;
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
+	swapchain_proxy->_current_swapchain_desc1 = original_desc;
 
 	return hr;
 }
