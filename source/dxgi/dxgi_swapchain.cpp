@@ -317,6 +317,15 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetDesc(DXGI_SWAP_CHAIN_DESC *pDesc)
 	const bool was_in_dxgi_runtime = g_in_dxgi_runtime;
 	g_in_dxgi_runtime = true;
 	const HRESULT hr = _orig->GetDesc(pDesc);
+
+#if RESHADE_ADDON
+	{
+		if (this->_current_swapchain_desc.has_value()) {
+			*pDesc = this->_current_swapchain_desc.value();
+		}
+	}
+#endif
+
 	g_in_dxgi_runtime = was_in_dxgi_runtime;
 	return hr;
 }
@@ -341,6 +350,18 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::ResizeBuffers(UINT BufferCount, UINT Wi
 		if (NewFormat != DXGI_FORMAT_UNKNOWN)
 			desc.BufferDesc.Format = NewFormat;
 		desc.Flags = SwapChainFlags;
+
+		if (this->_current_swapchain_desc.has_value()) {
+			this->_current_swapchain_desc->BufferCount = BufferCount;
+			this->_current_swapchain_desc->BufferDesc.Width = Width;
+			this->_current_swapchain_desc->BufferDesc.Height = Height;
+			if (NewFormat != DXGI_FORMAT_UNKNOWN)
+				this->_current_swapchain_desc->BufferDesc.Format = NewFormat;
+			this->_current_swapchain_desc->Flags = SwapChainFlags;
+		}
+		else {
+			this->_current_swapchain_desc = desc;
+		}
 
 		if (modify_swapchain_desc(desc, _sync_interval))
 		{
@@ -400,6 +421,15 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetDesc1(DXGI_SWAP_CHAIN_DESC1 *pDesc)
 	const bool was_in_dxgi_runtime = g_in_dxgi_runtime;
 	g_in_dxgi_runtime = true;
 	const HRESULT hr = static_cast<IDXGISwapChain1 *>(_orig)->GetDesc1(pDesc);
+
+#if RESHADE_ADDON
+	{
+		if (this->_current_swapchain_desc1.has_value()) {
+			*pDesc = this->_current_swapchain_desc1.value();
+		}
+	}
+#endif
+
 	g_in_dxgi_runtime = was_in_dxgi_runtime;
 	return hr;
 }
@@ -586,6 +616,18 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::ResizeBuffers1(UINT BufferCount, UINT W
 		if (NewFormat != DXGI_FORMAT_UNKNOWN)
 			desc.Format = NewFormat;
 		desc.Flags = SwapChainFlags;
+
+		if (this->_current_swapchain_desc1.has_value()) {
+			this->_current_swapchain_desc1->BufferCount = BufferCount;
+			this->_current_swapchain_desc1->Width = Width;
+			this->_current_swapchain_desc1->Height = Height;
+			if (NewFormat != DXGI_FORMAT_UNKNOWN)
+				this->_current_swapchain_desc1->Format = NewFormat;
+			this->_current_swapchain_desc1->Flags = SwapChainFlags;
+		}
+		else {
+			this->_current_swapchain_desc1 = desc;
+		}
 
 		fullscreen_desc.Windowed = !fullscreen;
 
