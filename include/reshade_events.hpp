@@ -147,6 +147,18 @@ namespace reshade
 		create_swapchain,
 
 		/// <summary>
+		/// Called after:
+		/// <list type="bullet">
+		/// <item><description>IDXGISwapChain::GetDesc</description></item>
+		/// </list>
+		/// <para>Callback function signature: <c>bool (api::swapchain *swapchain, api::swapchain_desc &amp;desc)</c></para>
+		/// </summary>
+		/// <remarks>
+		/// To overwrite the swap chain description, modify <c>desc</c> in the callback and return <see langword="true"/>, otherwise return <see langword="false"/>.
+		/// </remarks>
+		get_swapchain_desc = 96,
+
+		/// <summary>
 		/// Called on swap chain destruction (with the resize argument set to <see langword="false"/>), before:
 		/// <list type="bullet">
 		/// <item><description>IDirect3DDevice9::Release (for the implicit swap chain)</description></item>
@@ -1741,6 +1753,7 @@ namespace reshade
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::init_swapchain, void, api::swapchain *swapchain, bool resize);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::create_swapchain, bool, api::swapchain_desc &desc, void *hwnd);
+	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::get_swapchain_desc, bool, api::swapchain *swapchain, api::swapchain_desc &desc);
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::destroy_swapchain, void, api::swapchain *swapchain, bool resize);
 
 	RESHADE_DEFINE_ADDON_EVENT_TRAITS(addon_event::init_effect_runtime, void, api::effect_runtime *runtime);
