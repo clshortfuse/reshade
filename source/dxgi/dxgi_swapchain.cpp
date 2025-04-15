@@ -319,10 +319,9 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetDesc(DXGI_SWAP_CHAIN_DESC *pDesc)
 	const HRESULT hr = _orig->GetDesc(pDesc);
 
 #if RESHADE_ADDON
+	if (this->_masked_swapchain_desc.has_value())
 	{
-		if (this->_current_swapchain_desc.has_value()) {
-			*pDesc = this->_current_swapchain_desc.value();
-		}
+		*pDesc = this->_masked_swapchain_desc.value();
 	}
 #endif
 
@@ -351,20 +350,21 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::ResizeBuffers(UINT BufferCount, UINT Wi
 			desc.BufferDesc.Format = NewFormat;
 		desc.Flags = SwapChainFlags;
 
-		if (this->_current_swapchain_desc.has_value()) {
-			this->_current_swapchain_desc->BufferCount = BufferCount;
-			this->_current_swapchain_desc->BufferDesc.Width = Width;
-			this->_current_swapchain_desc->BufferDesc.Height = Height;
+		if (this->_masked_swapchain_desc.has_value()) {
+			this->_masked_swapchain_desc->BufferCount = BufferCount;
+			this->_masked_swapchain_desc->BufferDesc.Width = Width;
+			this->_masked_swapchain_desc->BufferDesc.Height = Height;
 			if (NewFormat != DXGI_FORMAT_UNKNOWN)
-				this->_current_swapchain_desc->BufferDesc.Format = NewFormat;
-			this->_current_swapchain_desc->Flags = SwapChainFlags;
-		}
-		else {
-			this->_current_swapchain_desc = desc;
+				this->_masked_swapchain_desc->BufferDesc.Format = NewFormat;
+			this->_masked_swapchain_desc->Flags = SwapChainFlags;
 		}
 
+		DXGI_SWAP_CHAIN_DESC original_desc = desc;
 		if (modify_swapchain_desc(desc, _sync_interval))
 		{
+			if (!this->_masked_swapchain_desc.has_value()) {
+				this->_masked_swapchain_desc = original_desc;
+			}
 			BufferCount = desc.BufferCount;
 			Width = desc.BufferDesc.Width;
 			Height = desc.BufferDesc.Height;
@@ -423,10 +423,9 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetDesc1(DXGI_SWAP_CHAIN_DESC1 *pDesc)
 	const HRESULT hr = static_cast<IDXGISwapChain1 *>(_orig)->GetDesc1(pDesc);
 
 #if RESHADE_ADDON
+	if (this->_masked_swapchain_desc1.has_value())
 	{
-		if (this->_current_swapchain_desc1.has_value()) {
-			*pDesc = this->_current_swapchain_desc1.value();
-		}
+		*pDesc = this->_masked_swapchain_desc1.value();
 	}
 #endif
 
@@ -617,22 +616,23 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::ResizeBuffers1(UINT BufferCount, UINT W
 			desc.Format = NewFormat;
 		desc.Flags = SwapChainFlags;
 
-		if (this->_current_swapchain_desc1.has_value()) {
-			this->_current_swapchain_desc1->BufferCount = BufferCount;
-			this->_current_swapchain_desc1->Width = Width;
-			this->_current_swapchain_desc1->Height = Height;
+		if (this->_masked_swapchain_desc1.has_value()) {
+			this->_masked_swapchain_desc1->BufferCount = BufferCount;
+			this->_masked_swapchain_desc1->Width = Width;
+			this->_masked_swapchain_desc1->Height = Height;
 			if (NewFormat != DXGI_FORMAT_UNKNOWN)
-				this->_current_swapchain_desc1->Format = NewFormat;
-			this->_current_swapchain_desc1->Flags = SwapChainFlags;
-		}
-		else {
-			this->_current_swapchain_desc1 = desc;
+				this->_masked_swapchain_desc1->Format = NewFormat;
+			this->_masked_swapchain_desc1->Flags = SwapChainFlags;
 		}
 
 		fullscreen_desc.Windowed = !fullscreen;
 
+		DXGI_SWAP_CHAIN_DESC1 original_desc = desc;
 		if (modify_swapchain_desc(desc, _sync_interval, &fullscreen_desc, hwnd))
 		{
+			if (!this->_masked_swapchain_desc1.has_value()) {
+				this->_masked_swapchain_desc1 = original_desc;
+			}
 			BufferCount = desc.BufferCount;
 			Width = desc.Width;
 			Height = desc.Height;

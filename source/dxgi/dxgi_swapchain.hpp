@@ -110,7 +110,7 @@ struct DECLSPEC_UUID("1F445F9F-9887-4C4C-9055-4E3BADAFCCA8") DXGISwapChain final
 	bool _was_still_drawing_last_frame = false;
 	UINT _sync_interval = UINT_MAX;
 	BOOL _current_fullscreen_state = -1;
-	std::optional<DXGI_SWAP_CHAIN_DESC> _current_swapchain_desc;
-	std::optional<DXGI_SWAP_CHAIN_DESC1> _current_swapchain_desc1;
+	std::optional<DXGI_SWAP_CHAIN_DESC> _masked_swapchain_desc = std::nullopt;
+	std::optional<DXGI_SWAP_CHAIN_DESC1> _masked_swapchain_desc1 = std::nullopt;
 
 };
