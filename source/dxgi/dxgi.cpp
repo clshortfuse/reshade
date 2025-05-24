@@ -206,7 +206,7 @@ static std::string format_to_string(DXGI_FORMAT format)
 	}
 }
 
-static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, [[maybe_unused]] UINT &sync_interval, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
+static void dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, [[maybe_unused]] UINT &sync_interval, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
 	reshade::log::message(reshade::log::level::info, "> Dumping swap chain description:");
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
@@ -229,12 +229,10 @@ static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, [[maybe_u
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
 
 #if RESHADE_ADDON
-	return modify_swapchain_desc(desc, sync_interval, device_api, create_swapchain_flags);
+	modify_swapchain_desc(desc, sync_interval, device_api, create_swapchain_flags);
 #endif
-
-	return false;
 }
-static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, [[maybe_unused]] UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, [[maybe_unused]] HWND window, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
+static void dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, [[maybe_unused]] UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, [[maybe_unused]] HWND window, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
 	reshade::log::message(reshade::log::level::info, "> Dumping swap chain description:");
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
@@ -267,10 +265,8 @@ static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, [[maybe_
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
 
 #if RESHADE_ADDON
-	return modify_swapchain_desc(desc, sync_interval, fullscreen_desc, window, device_api, create_swapchain_flags);
+	modify_swapchain_desc(desc, sync_interval, fullscreen_desc, window, device_api, create_swapchain_flags);
 #endif
-
-	return false;
 }
 
 UINT query_device(IUnknown *&device, com_ptr<IUnknown> &device_proxy)
