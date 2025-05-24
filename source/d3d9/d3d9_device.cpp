@@ -2784,7 +2784,7 @@ void Direct3DDevice9::resize_primitive_up_buffers(UINT vertex_buffer_size, UINT 
 #endif
 bool Direct3DDevice9::check_and_upgrade_dx9_ex(DWORD &Usage, D3DPOOL &Pool)
 {
-	if (Pool == D3DPOOL_MANAGED && (this->_create_swapchain_flags & reshade::api::create_swapchain_flags::mask_swapchain_changes) != 0)
+	if (Pool == D3DPOOL_MANAGED && (this->_create_swapchain_flags & reshade::api::create_swapchain_flags::force_dx9_ex) != 0)
 	{
 		Pool = D3DPOOL_DEFAULT;
 		Usage |= D3DUSAGE_DYNAMIC;
