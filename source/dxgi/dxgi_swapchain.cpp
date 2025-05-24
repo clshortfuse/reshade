@@ -17,8 +17,8 @@
 #include "runtime_manager.hpp"
 
 #if RESHADE_ADDON
-extern bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, UINT &sync_interval);
-extern bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, HWND window);
+extern bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, UINT &sync_interval, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags);
+extern bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, HWND window, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags);
 #endif
 
 extern UINT query_device(IUnknown *&device, com_ptr<IUnknown> &device_proxy);
@@ -319,9 +319,9 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetDesc(DXGI_SWAP_CHAIN_DESC *pDesc)
 	const HRESULT hr = _orig->GetDesc(pDesc);
 
 #if RESHADE_ADDON
-	if (this->_masked_swapchain_desc.has_value())
+	if ((this->_create_swapchain_flags & reshade::api::create_swapchain_flags::mask_swapchain_changes) != 0)
 	{
-		*pDesc = this->_masked_swapchain_desc.value();
+		*pDesc = this->_masked_swapchain_desc;
 	}
 #endif
 
@@ -350,26 +350,38 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::ResizeBuffers(UINT BufferCount, UINT Wi
 			desc.BufferDesc.Format = NewFormat;
 		desc.Flags = SwapChainFlags;
 
-		if (this->_masked_swapchain_desc.has_value()) {
-			this->_masked_swapchain_desc->BufferCount = BufferCount;
-			this->_masked_swapchain_desc->BufferDesc.Width = Width;
-			this->_masked_swapchain_desc->BufferDesc.Height = Height;
-			if (NewFormat != DXGI_FORMAT_UNKNOWN)
-				this->_masked_swapchain_desc->BufferDesc.Format = NewFormat;
-			this->_masked_swapchain_desc->Flags = SwapChainFlags;
-		}
+		
+		this->_masked_swapchain_desc.BufferCount = BufferCount;
+		this->_masked_swapchain_desc.BufferDesc.Width = Width;
+		this->_masked_swapchain_desc.BufferDesc.Height = Height;
+		if (NewFormat != DXGI_FORMAT_UNKNOWN)
+			this->_masked_swapchain_desc.BufferDesc.Format = NewFormat;
+		this->_masked_swapchain_desc.Flags = SwapChainFlags;
 
 		DXGI_SWAP_CHAIN_DESC original_desc = desc;
-		if (modify_swapchain_desc(desc, _sync_interval))
+
+		reshade::api::device_api device_api = device_api = reshade::api::device_api::d3d10;
+		switch (this->_direct3d_version) {
+		case 10:
+			device_api = reshade::api::device_api::d3d10;
+			break;
+		case 11:
+			device_api = reshade::api::device_api::d3d11;
+			break;
+		case 12:
+			device_api = reshade::api::device_api::d3d12;
+			break;
+		}
+
+		auto event_flags = this->_create_swapchain_flags;
+		if (modify_swapchain_desc(desc, _sync_interval, device_api, event_flags))
 		{
-			if (!this->_masked_swapchain_desc.has_value()) {
-				this->_masked_swapchain_desc = original_desc;
-			}
 			BufferCount = desc.BufferCount;
 			Width = desc.BufferDesc.Width;
 			Height = desc.BufferDesc.Height;
 			NewFormat = desc.BufferDesc.Format;
 			SwapChainFlags = desc.Flags;
+			this->_create_swapchain_flags = event_flags;
 		}
 	}
 #endif
@@ -423,9 +435,22 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::GetDesc1(DXGI_SWAP_CHAIN_DESC1 *pDesc)
 	const HRESULT hr = static_cast<IDXGISwapChain1 *>(_orig)->GetDesc1(pDesc);
 
 #if RESHADE_ADDON
-	if (this->_masked_swapchain_desc1.has_value())
+	if ((this->_create_swapchain_flags & reshade::api::create_swapchain_flags::mask_swapchain_changes) != 0)
 	{
-		*pDesc = this->_masked_swapchain_desc1.value();
+		(*pDesc).BufferCount = this->_masked_swapchain_desc.BufferCount;
+
+		(*pDesc).Width = this->_masked_swapchain_desc.BufferDesc.Width;
+		(*pDesc).Height = this->_masked_swapchain_desc.BufferDesc.Height;
+		(*pDesc).Format = this->_masked_swapchain_desc.BufferDesc.Format;
+
+		(*pDesc).BufferUsage = this->_masked_swapchain_desc.BufferUsage;
+
+		(*pDesc).Flags = this->_masked_swapchain_desc.Flags;
+
+		(*pDesc).SampleDesc.Count = this->_masked_swapchain_desc.SampleDesc.Count;
+		(*pDesc).SampleDesc.Quality = this->_masked_swapchain_desc.SampleDesc.Quality;
+
+		(*pDesc).SwapEffect = this->_masked_swapchain_desc.SwapEffect;
 	}
 #endif
 
@@ -616,28 +641,41 @@ HRESULT STDMETHODCALLTYPE DXGISwapChain::ResizeBuffers1(UINT BufferCount, UINT W
 			desc.Format = NewFormat;
 		desc.Flags = SwapChainFlags;
 
-		if (this->_masked_swapchain_desc1.has_value()) {
-			this->_masked_swapchain_desc1->BufferCount = BufferCount;
-			this->_masked_swapchain_desc1->Width = Width;
-			this->_masked_swapchain_desc1->Height = Height;
-			if (NewFormat != DXGI_FORMAT_UNKNOWN)
-				this->_masked_swapchain_desc1->Format = NewFormat;
-			this->_masked_swapchain_desc1->Flags = SwapChainFlags;
-		}
+
+		this->_masked_swapchain_desc.BufferCount = BufferCount;
+		this->_masked_swapchain_desc.BufferDesc.Width = Width;
+		this->_masked_swapchain_desc.BufferDesc.Height = Height;
+		if (NewFormat != DXGI_FORMAT_UNKNOWN)
+			this->_masked_swapchain_desc.BufferDesc.Format = NewFormat;
+		this->_masked_swapchain_desc.Flags = SwapChainFlags;
+		this->_masked_swapchain_desc.Windowed = !fullscreen;
 
 		fullscreen_desc.Windowed = !fullscreen;
 
-		DXGI_SWAP_CHAIN_DESC1 original_desc = desc;
-		if (modify_swapchain_desc(desc, _sync_interval, &fullscreen_desc, hwnd))
+		reshade::api::device_api device_api = device_api = reshade::api::device_api::d3d10;
+		switch (this->_direct3d_version)
 		{
-			if (!this->_masked_swapchain_desc1.has_value()) {
-				this->_masked_swapchain_desc1 = original_desc;
-			}
+		case 10:
+			device_api = reshade::api::device_api::d3d10;
+			break;
+		case 11:
+			device_api = reshade::api::device_api::d3d11;
+			break;
+		case 12:
+			device_api = reshade::api::device_api::d3d12;
+			break;
+		}
+
+		auto event_flags = this->_create_swapchain_flags;
+		if (modify_swapchain_desc(desc, _sync_interval, &fullscreen_desc, hwnd, device_api, event_flags))
+		{
+
 			BufferCount = desc.BufferCount;
 			Width = desc.Width;
 			Height = desc.Height;
 			NewFormat = desc.Format;
 			SwapChainFlags = desc.Flags;
+			this->_create_swapchain_flags = event_flags;
 		}
 	}
 #endif

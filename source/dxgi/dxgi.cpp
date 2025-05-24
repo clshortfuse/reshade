@@ -32,7 +32,7 @@ static auto rational_to_floating_point(DXGI_RATIONAL value) -> float
 	return value.Denominator != 0 ? static_cast<float>(value.Numerator) / static_cast<float>(value.Denominator) : 0.0f;
 }
 
-bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &internal_desc, UINT &sync_interval)
+bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &internal_desc, UINT &sync_interval, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
 	reshade::api::swapchain_desc desc = {};
 	desc.back_buffer.type = reshade::api::resource_type::texture_2d;
@@ -66,7 +66,9 @@ bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &internal_desc, UINT &sync_inter
 	desc.fullscreen_state = internal_desc.Windowed == FALSE;
 	desc.fullscreen_refresh_rate = rational_to_floating_point(internal_desc.BufferDesc.RefreshRate);
 
-	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, internal_desc.OutputWindow))
+	auto event_flags = create_swapchain_flags;
+
+	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, internal_desc.OutputWindow, device_api, event_flags))
 	{
 		internal_desc.BufferDesc.Width = desc.back_buffer.texture.width;
 		internal_desc.BufferDesc.Height = desc.back_buffer.texture.height;
@@ -91,12 +93,14 @@ bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &internal_desc, UINT &sync_inter
 		assert(desc.sync_interval <= 4 || desc.sync_interval == UINT_MAX);
 		sync_interval = desc.sync_interval;
 
+		create_swapchain_flags = event_flags;
+
 		return true;
 	}
 
 	return false;
 }
-bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &internal_desc, UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, HWND window)
+bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &internal_desc, UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, HWND window, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
 	reshade::api::swapchain_desc desc = {};
 	desc.back_buffer.type = reshade::api::resource_type::texture_2d;
@@ -137,7 +141,9 @@ bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &internal_desc, UINT &sync_inte
 		desc.fullscreen_refresh_rate = rational_to_floating_point(fullscreen_desc->RefreshRate);
 	}
 
-	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, window))
+	auto event_flags = create_swapchain_flags;
+
+	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, window, device_api, event_flags))
 	{
 		internal_desc.Width = desc.back_buffer.texture.width;
 		internal_desc.Height = desc.back_buffer.texture.height;
@@ -166,6 +172,8 @@ bool modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &internal_desc, UINT &sync_inte
 			fullscreen_desc->RefreshRate = floating_point_to_rational(desc.fullscreen_refresh_rate);
 			fullscreen_desc->Windowed = !desc.fullscreen_state;
 		}
+
+		create_swapchain_flags = event_flags;
 
 		return true;
 	}
@@ -198,7 +206,7 @@ static std::string format_to_string(DXGI_FORMAT format)
 	}
 }
 
-static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, [[maybe_unused]] UINT &sync_interval)
+static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, [[maybe_unused]] UINT &sync_interval, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
 	reshade::log::message(reshade::log::level::info, "> Dumping swap chain description:");
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
@@ -221,12 +229,12 @@ static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC &desc, [[maybe_u
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
 
 #if RESHADE_ADDON
-	return modify_swapchain_desc(desc, sync_interval);
+	return modify_swapchain_desc(desc, sync_interval, device_api, create_swapchain_flags);
 #endif
 
 	return false;
 }
-static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, [[maybe_unused]] UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc = nullptr, [[maybe_unused]] HWND window = nullptr)
+static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, [[maybe_unused]] UINT &sync_interval, DXGI_SWAP_CHAIN_FULLSCREEN_DESC *fullscreen_desc, [[maybe_unused]] HWND window, reshade::api::device_api device_api, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
 	reshade::log::message(reshade::log::level::info, "> Dumping swap chain description:");
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
@@ -259,7 +267,7 @@ static bool dump_and_modify_swapchain_desc(DXGI_SWAP_CHAIN_DESC1 &desc, [[maybe_
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
 
 #if RESHADE_ADDON
-	return modify_swapchain_desc(desc, sync_interval, fullscreen_desc, window);
+	return modify_swapchain_desc(desc, sync_interval, fullscreen_desc, window, device_api, create_swapchain_flags);
 #endif
 
 	return false;
@@ -318,8 +326,9 @@ UINT query_device(IUnknown *&device, com_ptr<IUnknown> &device_proxy)
 }
 
 template <typename T>
-static void init_swapchain_proxy(T *&swapchain, UINT direct3d_version, const com_ptr<IUnknown> &device_proxy, DXGI_USAGE usage, UINT sync_interval, DXGISwapChain*& swapchain_proxy)
+static void init_swapchain_proxy(T *&swapchain, UINT direct3d_version, const com_ptr<IUnknown> &device_proxy, DXGI_USAGE usage, UINT sync_interval, const reshade::api::create_swapchain_flags &create_swapchain_flags, const DXGI_SWAP_CHAIN_DESC &desc)
 {
+	DXGISwapChain *swapchain_proxy = nullptr;
 
 	if ((usage & DXGI_USAGE_RENDER_TARGET_OUTPUT) == 0)
 	{
@@ -364,6 +373,8 @@ static void init_swapchain_proxy(T *&swapchain, UINT direct3d_version, const com
 		swapchain = swapchain_proxy;
 
 		swapchain_proxy->_sync_interval = sync_interval;
+		swapchain_proxy->_create_swapchain_flags = create_swapchain_flags;
+		swapchain_proxy->_masked_swapchain_desc = desc;
 	}
 }
 
@@ -385,10 +396,25 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory_CreateSwapChain(IDXGIFactory *pFactory, I
 	DXGI_SWAP_CHAIN_DESC desc = *pDesc;
 	UINT sync_interval = UINT_MAX;
 	DXGI_SWAP_CHAIN_DESC original_desc = desc;
-	bool swapchain_desc_is_modified = dump_and_modify_swapchain_desc(desc, sync_interval);
 
 	com_ptr<IUnknown> device_proxy;
 	const UINT direct3d_version = query_device(pDevice, device_proxy);
+
+	reshade::api::device_api device_api;
+	switch (direct3d_version)
+	{
+	case 10:
+		device_api = reshade::api::device_api::d3d10; break;
+	case 11:
+		device_api = reshade::api::device_api::d3d11; break;
+	case 12:
+		device_api = reshade::api::device_api::d3d12; break;
+	default:
+		return DXGI_ERROR_INVALID_CALL;
+	}
+
+	auto create_swapchain_flags = reshade::api::create_swapchain_flags::none;
+	dump_and_modify_swapchain_desc(desc, sync_interval, device_api, create_swapchain_flags);
 
 	g_in_dxgi_runtime = true;
 	const HRESULT hr = trampoline(pFactory, pDevice, &desc, ppSwapChain);
@@ -399,23 +425,7 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory_CreateSwapChain(IDXGIFactory *pFactory, I
 		return hr;
 	}
 
-	DXGISwapChain *swapchain_proxy = nullptr;
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
-	if (swapchain_proxy == nullptr)
-	{
-		if (swapchain_desc_is_modified)
-		{
-			reshade::log::message(reshade::log::level::warning, "IDXGIFactory2::CreateSwapChain has modified swapchain desc with no proxy.");
-		}
-	}
-	else if (swapchain_desc_is_modified)
-	{
-		swapchain_proxy->_masked_swapchain_desc = original_desc;
-	}
-	else
-	{
-		swapchain_proxy->_masked_swapchain_desc.reset();
-	}
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, create_swapchain_flags, original_desc);
 
 	return hr;
 }
@@ -436,17 +446,31 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForHwnd(IDXGIFactory2 *pF
 		return DXGI_ERROR_INVALID_CALL;
 
 	DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
-	DXGI_SWAP_CHAIN_DESC1 original_desc = desc;
+	DXGI_SWAP_CHAIN_DESC1 original_desc1 = desc;
 	UINT sync_interval = UINT_MAX;
 	DXGI_SWAP_CHAIN_FULLSCREEN_DESC fullscreen_desc = {};
 	if (pFullscreenDesc != nullptr)
 		fullscreen_desc = *pFullscreenDesc;
 	else
 		fullscreen_desc.Windowed = TRUE;
-	bool swapchain_desc_is_modified = dump_and_modify_swapchain_desc(desc, sync_interval, &fullscreen_desc, hWnd);
-
 	com_ptr<IUnknown> device_proxy;
 	const UINT direct3d_version = query_device(pDevice, device_proxy);
+
+	reshade::api::device_api device_api;
+	switch (direct3d_version)
+	{
+	case 10:
+		device_api = reshade::api::device_api::d3d10; break;
+	case 11:
+		device_api = reshade::api::device_api::d3d11; break;
+	case 12:
+		device_api = reshade::api::device_api::d3d12; break;
+	default:
+		return DXGI_ERROR_INVALID_CALL;
+	}
+
+	auto create_swapchain_flags = reshade::api::create_swapchain_flags::none;
+	dump_and_modify_swapchain_desc(desc, sync_interval, &fullscreen_desc, hWnd, device_api, create_swapchain_flags);
 
 	// Space Engineers 2 does not set any usage flags, change default to at least include render target output support
 	if (0 == desc.BufferUsage && direct3d_version == 12)
@@ -461,24 +485,24 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForHwnd(IDXGIFactory2 *pF
 		return hr;
 	}
 
-	DXGISwapChain *swapchain_proxy = nullptr;
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
-	if (swapchain_proxy == nullptr)
-	{
-		if (swapchain_desc_is_modified)
-		{
-			reshade::log::message(reshade::log::level::warning, "IDXGIFactory2::CreateSwapChainForHwnd has modified swapchain desc with no proxy.");
-		}
-	}
-	else if (swapchain_desc_is_modified)
-	{
-		swapchain_proxy->_masked_swapchain_desc1 = original_desc;
-	}
-	else
-	{
-		swapchain_proxy->_masked_swapchain_desc1.reset();
-	}
 
+    // Convert original_desc1 (DXGI_SWAP_CHAIN_DESC1) to original_desc (DXGI_SWAP_CHAIN_DESC)
+    DXGI_SWAP_CHAIN_DESC original_desc = {};
+    original_desc.BufferDesc.Width = original_desc1.Width;
+    original_desc.BufferDesc.Height = original_desc1.Height;
+    original_desc.BufferDesc.Format = original_desc1.Format;
+    original_desc.BufferDesc.RefreshRate.Numerator = fullscreen_desc.RefreshRate.Numerator;
+    original_desc.BufferDesc.RefreshRate.Denominator = fullscreen_desc.RefreshRate.Denominator;
+    original_desc.BufferDesc.ScanlineOrdering = fullscreen_desc.ScanlineOrdering;
+    original_desc.BufferDesc.Scaling = fullscreen_desc.Scaling;
+    original_desc.SampleDesc = original_desc1.SampleDesc;
+    original_desc.BufferUsage = original_desc1.BufferUsage;
+    original_desc.BufferCount = original_desc1.BufferCount;
+    original_desc.OutputWindow = hWnd;
+    original_desc.Windowed = fullscreen_desc.Windowed;
+    original_desc.SwapEffect = original_desc1.SwapEffect;
+    original_desc.Flags = original_desc1.Flags;
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, create_swapchain_flags, original_desc);
 
 	return hr;
 }
@@ -498,13 +522,27 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForCoreWindow(IDXGIFactor
 		return DXGI_ERROR_INVALID_CALL;
 
 	DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
-	DXGI_SWAP_CHAIN_DESC1 original_desc = desc;
+	DXGI_SWAP_CHAIN_DESC1 original_desc1 = desc;
 	UINT sync_interval = UINT_MAX;
 	// UWP applications cannot be set into fullscreen mode
-	bool swapchain_desc_is_modified = dump_and_modify_swapchain_desc(desc, sync_interval);
-
 	com_ptr<IUnknown> device_proxy;
 	const UINT direct3d_version = query_device(pDevice, device_proxy);
+
+	reshade::api::device_api device_api;
+	switch (direct3d_version)
+	{
+	case 10:
+		device_api = reshade::api::device_api::d3d10; break;
+	case 11:
+		device_api = reshade::api::device_api::d3d11; break;
+	case 12:
+		device_api = reshade::api::device_api::d3d12; break;
+	default:
+		return DXGI_ERROR_INVALID_CALL;
+	}
+
+	auto create_swapchain_flags = reshade::api::create_swapchain_flags::none;
+	dump_and_modify_swapchain_desc(desc, sync_interval, nullptr, nullptr, device_api, create_swapchain_flags);
 
 	g_in_dxgi_runtime = true;
 	const HRESULT hr = trampoline(pFactory, pDevice, pWindow, &desc, pRestrictToOutput, ppSwapChain);
@@ -515,23 +553,22 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForCoreWindow(IDXGIFactor
 		return hr;
 	}
 
-	DXGISwapChain *swapchain_proxy = nullptr;
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
-	if (swapchain_proxy == nullptr)
-	{
-		if (swapchain_desc_is_modified)
-		{
-			reshade::log::message(reshade::log::level::warning, "IDXGIFactory2::CreateSwapChainForCoreWindow has modified swapchain desc with no proxy.");
-		}
-	}
-	else if (swapchain_desc_is_modified)
-	{
-		swapchain_proxy->_masked_swapchain_desc1 = original_desc;
-	}
-	else
-	{
-		swapchain_proxy->_masked_swapchain_desc1.reset();
-	}
+	DXGI_SWAP_CHAIN_DESC original_desc = {};
+    original_desc.BufferDesc.Width = original_desc1.Width;
+    original_desc.BufferDesc.Height = original_desc1.Height;
+    original_desc.BufferDesc.Format = original_desc1.Format;
+    original_desc.BufferDesc.RefreshRate.Numerator = 0;
+    original_desc.BufferDesc.RefreshRate.Denominator = 0;
+    original_desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+    original_desc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+    original_desc.SampleDesc = original_desc1.SampleDesc;
+    original_desc.BufferUsage = original_desc1.BufferUsage;
+    original_desc.BufferCount = original_desc1.BufferCount;
+    original_desc.OutputWindow = nullptr;
+    original_desc.Windowed = TRUE;
+    original_desc.SwapEffect = original_desc1.SwapEffect;
+    original_desc.Flags = original_desc1.Flags;
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, create_swapchain_flags, original_desc);
 
 	return hr;
 }
@@ -551,13 +588,28 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForComposition(IDXGIFacto
 		return DXGI_ERROR_INVALID_CALL;
 
 	DXGI_SWAP_CHAIN_DESC1 desc = *pDesc;
-	DXGI_SWAP_CHAIN_DESC1 original_desc = desc;
+	DXGI_SWAP_CHAIN_DESC1 original_desc1 = desc;
 	UINT sync_interval = UINT_MAX;
 	// Composition swap chains cannot be set into fullscreen mode
-	bool swapchain_desc_is_modified = dump_and_modify_swapchain_desc(desc, sync_interval);
 
 	com_ptr<IUnknown> device_proxy;
 	const UINT direct3d_version = query_device(pDevice, device_proxy);
+
+	reshade::api::device_api device_api;
+	switch (direct3d_version)
+	{
+	case 10:
+		device_api = reshade::api::device_api::d3d10; break;
+	case 11:
+		device_api = reshade::api::device_api::d3d11; break;
+	case 12:
+		device_api = reshade::api::device_api::d3d12; break;
+	default:
+		return DXGI_ERROR_INVALID_CALL;
+	}
+
+	auto create_swapchain_flags = reshade::api::create_swapchain_flags::none;
+	dump_and_modify_swapchain_desc(desc, sync_interval, nullptr,  nullptr, device_api, create_swapchain_flags);
 
 	g_in_dxgi_runtime = true;
 	const HRESULT hr = trampoline(pFactory, pDevice, &desc, pRestrictToOutput, ppSwapChain);
@@ -568,23 +620,23 @@ HRESULT STDMETHODCALLTYPE IDXGIFactory2_CreateSwapChainForComposition(IDXGIFacto
 		return hr;
 	}
 
-	DXGISwapChain *swapchain_proxy = nullptr;
-	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, swapchain_proxy);
-	if (swapchain_proxy == nullptr)
-	{
-		if (swapchain_desc_is_modified)
-		{
-			reshade::log::message(reshade::log::level::warning, "IDXGIFactory2::CreateSwapChainForComposition has modified swapchain desc with no proxy.");
-		}
-	}
-	else if (swapchain_desc_is_modified)
-	{
-		swapchain_proxy->_masked_swapchain_desc1 = original_desc;
-	}
-	else
-	{
-		swapchain_proxy->_masked_swapchain_desc1.reset();
-	}
+
+	DXGI_SWAP_CHAIN_DESC original_desc = {};
+	original_desc.BufferDesc.Width = original_desc1.Width;
+	original_desc.BufferDesc.Height = original_desc1.Height;
+	original_desc.BufferDesc.Format = original_desc1.Format;
+	original_desc.BufferDesc.RefreshRate.Numerator = 0;
+	original_desc.BufferDesc.RefreshRate.Denominator = 0;
+	original_desc.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+	original_desc.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+	original_desc.SampleDesc = original_desc1.SampleDesc;
+	original_desc.BufferUsage = original_desc1.BufferUsage;
+	original_desc.BufferCount = original_desc1.BufferCount;
+	original_desc.OutputWindow = nullptr;
+	original_desc.Windowed = TRUE;
+	original_desc.SwapEffect = original_desc1.SwapEffect;
+	original_desc.Flags = original_desc1.Flags;
+	init_swapchain_proxy(*ppSwapChain, direct3d_version, device_proxy, desc.BufferUsage, sync_interval, create_swapchain_flags, original_desc);
 
 	return hr;
 }

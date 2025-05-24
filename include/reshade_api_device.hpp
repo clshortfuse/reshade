@@ -1200,6 +1200,14 @@ namespace reshade { namespace api
 		virtual uint64_t get_timestamp_frequency() const = 0;
 	};
 
+	enum class create_swapchain_flags : uint32_t
+	{
+		none = 0x0U,
+		mask_swapchain_changes = 0x1U,
+		force_dx9_ex = 0x2U,
+	};
+	RESHADE_DEFINE_ENUM_FLAG_OPERATORS(create_swapchain_flags);
+
 	/// <summary>
 	/// Describes a swap chain and its back buffer resources.
 	/// </summary>

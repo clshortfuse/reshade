@@ -12,6 +12,7 @@
 
 // These are defined in d3d9.h, but are used as function names below
 #undef IDirect3D9_CreateDevice
+#undef IDirect3D9Ex_CreateDevice
 #undef IDirect3D9Ex_CreateDeviceEx
 
 static std::string format_to_string(D3DFORMAT format)
@@ -36,7 +37,7 @@ static std::string format_to_string(D3DFORMAT format)
 	}
 }
 
-void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, [[maybe_unused]] IDirect3D9 *d3d, [[maybe_unused]] UINT adapter_index, [[maybe_unused]] HWND focus_window)
+void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, [[maybe_unused]] IDirect3D9 *d3d, [[maybe_unused]] UINT adapter_index, [[maybe_unused]] HWND focus_window, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
 	reshade::log::message(reshade::log::level::info, "Dumping presentation parameters:");
 	reshade::log::message(reshade::log::level::info, "  +-----------------------------------------+-----------------------------------------+");
@@ -117,7 +118,9 @@ void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, [[maybe_unuse
 		desc.sync_interval = UINT32_MAX;
 	}
 
-	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, window))
+	auto event_flags = create_swapchain_flags;
+
+	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, window, reshade::api::device_api::d3d9, event_flags))
 	{
 		pp.BackBufferWidth = desc.back_buffer.texture.width;
 		pp.BackBufferHeight = desc.back_buffer.texture.height;
@@ -191,12 +194,14 @@ void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, [[maybe_unuse
 			pp.PresentationInterval = D3DPRESENT_INTERVAL_DEFAULT;
 			break;
 		}
+
+		create_swapchain_flags = event_flags;
 	}
 #endif
 }
-void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, D3DDISPLAYMODEEX &fullscreen_desc, IDirect3D9 *d3d, UINT adapter_index, [[maybe_unused]] HWND focus_window)
+void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, D3DDISPLAYMODEEX &fullscreen_desc, IDirect3D9 *d3d, UINT adapter_index, [[maybe_unused]] HWND focus_window, reshade::api::create_swapchain_flags &create_swapchain_flags)
 {
-	dump_and_modify_present_parameters(pp, d3d, adapter_index, focus_window);
+	dump_and_modify_present_parameters(pp, d3d, adapter_index, focus_window, create_swapchain_flags);
 
 	assert(fullscreen_desc.Size == sizeof(D3DDISPLAYMODEEX));
 
@@ -213,7 +218,7 @@ void dump_and_modify_present_parameters(D3DPRESENT_PARAMETERS &pp, D3DDISPLAYMOD
 extern void init_device_proxy_for_d3d9on12(Direct3DDevice9 *device_proxy);
 
 template <typename T>
-static void init_device_proxy(T *&device, D3DDEVTYPE device_type, bool use_software_rendering)
+static void init_device_proxy(T *&device, D3DDEVTYPE device_type, bool use_software_rendering, reshade::api::create_swapchain_flags create_swapchain_flags)
 {
 	// Enable software vertex processing if the application requested a software device
 	if (use_software_rendering)
@@ -231,6 +236,7 @@ static void init_device_proxy(T *&device, D3DDEVTYPE device_type, bool use_softw
 
 	const auto device_proxy = new Direct3DDevice9(device, use_software_rendering);
 	device_proxy->_implicit_swapchain = new Direct3DSwapChain9(device_proxy, swapchain);
+	device_proxy->_create_swapchain_flags = create_swapchain_flags;
 
 	// Overwrite returned device with proxy device
 	device = device_proxy;
@@ -286,7 +292,8 @@ HRESULT STDMETHODCALLTYPE IDirect3D9_CreateDevice(IDirect3D9 *pD3D, UINT Adapter
 #endif
 
 	D3DPRESENT_PARAMETERS pp = *pPresentationParameters;
-	dump_and_modify_present_parameters(pp, pD3D, Adapter, hFocusWindow);
+	auto create_swapchain_flags = reshade::api::create_swapchain_flags::none;
+	dump_and_modify_present_parameters(pp, pD3D, Adapter, hFocusWindow, create_swapchain_flags);
 
 	const bool use_software_rendering = (BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING) != 0;
 	if (use_software_rendering)
@@ -309,7 +316,7 @@ HRESULT STDMETHODCALLTYPE IDirect3D9_CreateDevice(IDirect3D9 *pD3D, UINT Adapter
 
 	if (SUCCEEDED(hr))
 	{
-		init_device_proxy(*ppReturnedDeviceInterface, DeviceType, use_software_rendering);
+		init_device_proxy(*ppReturnedDeviceInterface, DeviceType, use_software_rendering, create_swapchain_flags);
 	}
 	else
 	{
@@ -354,7 +361,8 @@ HRESULT STDMETHODCALLTYPE IDirect3D9Ex_CreateDeviceEx(IDirect3D9Ex *pD3D, UINT A
 	if (pFullscreenDisplayMode != nullptr)
 		fullscreen_mode = *pFullscreenDisplayMode;
 	D3DPRESENT_PARAMETERS pp = *pPresentationParameters;
-	dump_and_modify_present_parameters(pp, fullscreen_mode, pD3D, Adapter, hFocusWindow);
+	auto create_swapchain_flags = reshade::api::create_swapchain_flags::none;
+	dump_and_modify_present_parameters(pp, fullscreen_mode, pD3D, Adapter, hFocusWindow, create_swapchain_flags);
 
 	const bool use_software_rendering = (BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING) != 0;
 	if (use_software_rendering)
@@ -377,7 +385,7 @@ HRESULT STDMETHODCALLTYPE IDirect3D9Ex_CreateDeviceEx(IDirect3D9Ex *pD3D, UINT A
 
 	if (SUCCEEDED(hr))
 	{
-		init_device_proxy(*ppReturnedDeviceInterface, DeviceType, use_software_rendering);
+		init_device_proxy(*ppReturnedDeviceInterface, DeviceType, use_software_rendering, create_swapchain_flags);
 	}
 	else
 	{
@@ -392,31 +400,115 @@ HRESULT STDMETHODCALLTYPE IDirect3D9Ex_CreateDeviceEx(IDirect3D9Ex *pD3D, UINT A
 	return hr;
 }
 
+HRESULT STDMETHODCALLTYPE IDirect3D9Ex_CreateDevice(IDirect3D9Ex *pD3D, UINT Adapter, D3DDEVTYPE DeviceType, HWND hFocusWindow, DWORD BehaviorFlags, D3DPRESENT_PARAMETERS *pPresentationParameters, IDirect3DDevice9Ex **ppReturnedDeviceInterface)
+{
+	const auto trampoline = reshade::hooks::call(IDirect3D9Ex_CreateDevice, reshade::hooks::vtable_from_instance(pD3D) + 16);
+	const auto trampoline_ex = reshade::hooks::call(IDirect3D9Ex_CreateDeviceEx, reshade::hooks::vtable_from_instance(pD3D) + 20);
+
+	// Pass on unmodified in case this called from within the runtime, to avoid hooking internal devices
+	if (g_in_d3d9_runtime)
+		return trampoline(pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface);
+
+	reshade::log::message(
+		reshade::log::level::info,
+		"Redirecting IDirect3D9::CreateDevice(this = %p, Adapter = %u, DeviceType = %d, hFocusWindow = %p, BehaviorFlags = %#x, pPresentationParameters = %p, ppReturnedDeviceInterface = %p) ...",
+		pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags, pPresentationParameters, ppReturnedDeviceInterface);
+
+	if (pPresentationParameters == nullptr)
+		return D3DERR_INVALIDCALL;
+
+	if ((BehaviorFlags & D3DCREATE_ADAPTERGROUP_DEVICE) != 0)
+	{
+		reshade::log::message(reshade::log::level::warning, "Adapter group devices are unsupported.");
+		return D3DERR_NOTAVAILABLE;
+	}
+
+#if RESHADE_ADDON
+	// Load add-ons before 'create_swapchain' event in 'dump_and_modify_present_parameters'
+	reshade::load_addons();
+#endif
+
+	D3DPRESENT_PARAMETERS pp = *pPresentationParameters;
+	auto create_swapchain_flags = reshade::api::create_swapchain_flags::none;
+	dump_and_modify_present_parameters(pp, pD3D, Adapter, hFocusWindow, create_swapchain_flags);
+
+	const bool use_software_rendering = (BehaviorFlags & D3DCREATE_SOFTWARE_VERTEXPROCESSING) != 0;
+	if (use_software_rendering)
+	{
+		reshade::log::message(reshade::log::level::info, "> Replacing 'D3DCREATE_SOFTWARE_VERTEXPROCESSING' flag with 'D3DCREATE_MIXED_VERTEXPROCESSING' to allow for hardware rendering.");
+
+		BehaviorFlags = (BehaviorFlags & ~D3DCREATE_SOFTWARE_VERTEXPROCESSING) | D3DCREATE_MIXED_VERTEXPROCESSING;
+	}
+
+	assert(!g_in_dxgi_runtime);
+	g_in_d3d9_runtime = g_in_dxgi_runtime = true;
+	HRESULT hr;
+	if ((create_swapchain_flags & reshade::api::create_swapchain_flags::force_dx9_ex) != 0)
+	{
+		hr = trampoline_ex(pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags, &pp, NULL, ppReturnedDeviceInterface);
+	}
+	else
+	{
+		hr = trampoline(pD3D, Adapter, DeviceType, hFocusWindow, BehaviorFlags, &pp, ppReturnedDeviceInterface);
+	}
+	g_in_d3d9_runtime = g_in_dxgi_runtime = false;
+
+	// Update output values (see https://docs.microsoft.com/windows/win32/api/d3d9/nf-d3d9-idirect3d9-createdevice)
+	pPresentationParameters->BackBufferWidth = pp.BackBufferWidth;
+	pPresentationParameters->BackBufferHeight = pp.BackBufferHeight;
+	pPresentationParameters->BackBufferFormat = pp.BackBufferFormat;
+	pPresentationParameters->BackBufferCount = pp.BackBufferCount;
+
+	if (SUCCEEDED(hr))
+	{
+		init_device_proxy(*ppReturnedDeviceInterface, DeviceType, use_software_rendering, create_swapchain_flags);
+	}
+	else
+	{
+		reshade::log::message(reshade::log::level::warning, "IDirect3D9::CreateDevice failed with error code %s.", reshade::log::hr_to_string(hr).c_str());
+	}
+
+#if RESHADE_ADDON
+	// Device proxy was created at this point, which increased the add-on manager reference count, so can release the one from above again
+	reshade::unload_addons();
+#endif
+
+	return hr;
+}
+
 extern "C" IDirect3D9 *WINAPI Direct3DCreate9(UINT SDKVersion)
 {
-	const auto trampoline = reshade::hooks::call(Direct3DCreate9);
+	const auto trampoline = reshade::hooks::call(Direct3DCreate9Ex);
+	IDirect3D9Ex *pD3D9Ex = nullptr;
+	IDirect3D9Ex **ppD3D = &pD3D9Ex;
 
 	if (g_in_d3d9_runtime)
-		return trampoline(SDKVersion);
+	{
+		trampoline(SDKVersion, &pD3D9Ex);
+		return pD3D9Ex;
+	}
 
 	reshade::log::message(reshade::log::level::info, "Redirecting Direct3DCreate9(SDKVersion = %#x) ...", SDKVersion);
 
 	assert(!g_in_dxgi_runtime);
 	g_in_d3d9_runtime = g_in_dxgi_runtime = true;
-	IDirect3D9 *const res = trampoline(SDKVersion);
+	const HRESULT hr = trampoline(SDKVersion, ppD3D);
 	g_in_d3d9_runtime = g_in_dxgi_runtime = false;
-	if (res == nullptr)
+	if (FAILED(hr))
 	{
-		reshade::log::message(reshade::log::level::warning, "Direct3DCreate9 failed.");
+		reshade::log::message(reshade::log::level::warning, "Direct3DCreate9Ex failed with error code %s.", reshade::log::hr_to_string(hr).c_str());
 		return nullptr;
 	}
 
-	reshade::hooks::install("IDirect3D9::CreateDevice", reshade::hooks::vtable_from_instance(res), 16, reinterpret_cast<reshade::hook::address>(&IDirect3D9_CreateDevice));
+	assert(ppD3D != nullptr);
+
+	reshade::hooks::install("IDirect3D9::CreateDevice", reshade::hooks::vtable_from_instance(*ppD3D), 16, reinterpret_cast<reshade::hook::address>(&IDirect3D9Ex_CreateDevice));
+	reshade::hooks::install("IDirect3D9Ex::CreateDeviceEx", reshade::hooks::vtable_from_instance(*ppD3D), 20, reinterpret_cast<reshade::hook::address>(&IDirect3D9Ex_CreateDeviceEx));
 
 #if RESHADE_VERBOSE_LOG
-	reshade::log::message(reshade::log::level::debug, "Returning IDirect3D9 object %p.", res);
+	reshade::log::message(reshade::log::level::debug, "Returning IDirect3D9Ex object %p.", *ppD3D);
 #endif
-	return res;
+	return pD3D9Ex;
 }
 
 extern "C"     HRESULT WINAPI Direct3DCreate9Ex(UINT SDKVersion, IDirect3D9Ex **ppD3D)

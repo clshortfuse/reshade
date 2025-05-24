@@ -608,7 +608,9 @@ extern "C" BOOL  WINAPI wglSetPixelFormat(HDC hdc, int iPixelFormat, const PIXEL
 		desc.sync_interval = wglGetSwapIntervalEXT();
 	}
 
-	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, hwnd))
+	auto event_flags = reshade::api::create_swapchain_flags::none;
+
+	if (reshade::invoke_addon_event<reshade::addon_event::create_swapchain>(desc, hwnd, reshade::api::device_api::opengl, event_flags))
 	{
 		reshade::opengl::convert_pixel_format(desc.back_buffer.texture.format, pfd);
 

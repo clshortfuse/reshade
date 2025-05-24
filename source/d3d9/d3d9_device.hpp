@@ -171,6 +171,8 @@ struct DECLSPEC_UUID("F1006E9A-1C51-4AF4-ACEF-3605D2D4C8EE") Direct3DDevice9 fin
 
 	bool check_and_upgrade_interface(REFIID riid);
 
+	bool check_and_upgrade_dx9_ex(DWORD &Usage, D3DPOOL &Pool);
+
 	LONG _ref = 1;
 	LONG _resource_ref = 0;
 	bool _extended_interface;
@@ -188,4 +190,5 @@ struct DECLSPEC_UUID("F1006E9A-1C51-4AF4-ACEF-3605D2D4C8EE") Direct3DDevice9 fin
 	reshade::api::resource _primitive_up_vertex_buffer = {};
 	reshade::api::resource _primitive_up_index_buffer = {};
 #endif
+	reshade::api::create_swapchain_flags _create_swapchain_flags;
 };
