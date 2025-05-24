@@ -7,7 +7,6 @@
 
 #include <dxgi1_6.h>
 #include <mutex>
-#include <optional>
 
 struct D3D10Device;
 struct D3D11Device;
