@@ -150,10 +150,12 @@ namespace reshade::opengl
 	GLenum convert_primitive_topology(api::primitive_topology value);
 	GLenum convert_query_type(api::query_type type);
 	GLenum convert_shader_type(api::shader_stage type);
+
+	template <typename T>
+	inline void hash_combine(size_t &seed, const T &v)
+	{
+		seed ^= std::hash<T>()(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+	}
 }
 
-template <typename T>
-inline void hash_combine(size_t &seed, const T &v)
-{
-	seed ^= std::hash<T>()(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-}
+

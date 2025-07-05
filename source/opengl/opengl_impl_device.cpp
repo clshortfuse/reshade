@@ -12,7 +12,57 @@
 #include <cstring> // std::memcpy, std::strcmp, std::strncmp, std::strncpy
 #include <algorithm> // std::copy_n, std::fill_n, std::max
 
+#define USE_VULKAN_UTILS
+
+#ifdef USE_VULKAN_UTILS
+#include "../vulkan/vulkan_hooks.hpp"
+#include "../vulkan/vulkan_impl_device.hpp"
+#include "../vulkan/vulkan_impl_command_list.hpp"
+#include "../vulkan/vulkan_impl_type_convert.hpp"
+static bool g_vulkan_failed = false;
+static VkInstance g_vulkan_instance = VK_NULL_HANDLE;
+static VkDevice g_vulkan_device = VK_NULL_HANDLE;
+static VkPhysicalDevice g_physical_device = VK_NULL_HANDLE;
+static PFN_vkCreateImage pfn_vkCreateImage = nullptr;
+static PFN_vkDestroyImage pfn_vkDestroyImage = nullptr;
+static PFN_vkDestroyDevice pfn_vkDestroyDevice = nullptr;
+static PFN_vkDestroyInstance pfn_vkDestroyInstance = nullptr;
+static PFN_vkGetImageMemoryRequirements pfn_vkGetImageMemoryRequirements = nullptr;
+#endif
+
 #define gl gl3wProcs.gl
+
+
+
+
+// GL_EXT_memory_object and GL_EXT_memory_object_win32 function pointers and constants
+#ifndef GL_HANDLE_TYPE_OPAQUE_WIN32_EXT
+#define GL_HANDLE_TYPE_OPAQUE_WIN32_EXT 0x9587
+#endif
+#ifndef GL_HANDLE_TYPE_OPAQUE_WIN32_KMT_EXT
+#define GL_HANDLE_TYPE_OPAQUE_WIN32_KMT_EXT 0x9588
+#endif
+
+// GL_EXT_memory_object and GL_EXT_memory_object_win32 function pointers
+typedef void (APIENTRYP PFNGLCREATEMEMORYOBJECTSEXTPROC)(GLsizei, GLuint*);
+typedef void (APIENTRYP PFNGLDELETEMEMORYOBJECTSEXTPROC)(GLsizei, const GLuint*);
+typedef void (APIENTRYP PFNGLIMPORTMEMORYWIN32HANDLEEXTPROC)(GLuint, GLuint64, GLenum, void*);
+typedef void (APIENTRYP PFNGLIMPORTMEMORYWIN32NAMEEXTPROC)(GLuint, GLuint64, GLenum, const void*);
+typedef void (APIENTRYP PFNGLBUFFERSTORAGEMEMEXTPROC)(GLenum, GLsizeiptr, GLuint, GLuint64);
+typedef void (APIENTRYP PFNGLTEXSTORAGEMEM2DEXTPROC)(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLuint, GLuint64);
+typedef void (APIENTRYP PFNGLTEXSTORAGEMEM3DEXTPROC)(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLuint, GLuint64);
+typedef void (APIENTRYP PFNGLTEXSTORAGEMEM2DMULTISAMPLEEXTPROC)(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLboolean, GLuint, GLuint64);
+typedef void (APIENTRYP PFNGLTEXSTORAGEMEM3DMULTISAMPLEEXTPROC)(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei, GLboolean, GLuint, GLuint64);
+
+static PFNGLCREATEMEMORYOBJECTSEXTPROC glCreateMemoryObjectsEXT = nullptr;
+static PFNGLDELETEMEMORYOBJECTSEXTPROC glDeleteMemoryObjectsEXT = nullptr;
+static PFNGLIMPORTMEMORYWIN32HANDLEEXTPROC glImportMemoryWin32HandleEXT = nullptr;
+static PFNGLIMPORTMEMORYWIN32NAMEEXTPROC glImportMemoryWin32NameEXT = nullptr;
+static PFNGLBUFFERSTORAGEMEMEXTPROC glBufferStorageMemEXT = nullptr;
+static PFNGLTEXSTORAGEMEM2DEXTPROC glTexStorageMem2DEXT = nullptr;
+static PFNGLTEXSTORAGEMEM3DEXTPROC glTexStorageMem3DEXT = nullptr;
+static PFNGLTEXSTORAGEMEM2DMULTISAMPLEEXTPROC glTexStorageMem2DMultisampleEXT = nullptr;
+static PFNGLTEXSTORAGEMEM3DMULTISAMPLEEXTPROC glTexStorageMem3DMultisampleEXT = nullptr;
 
 reshade::opengl::device_impl::device_impl(HDC initial_hdc, HGLRC shared_hglrc, bool compatibility_context) :
 	api_object_impl(shared_hglrc),
@@ -72,6 +122,17 @@ reshade::opengl::device_impl::device_impl(HDC initial_hdc, HGLRC shared_hglrc, b
 				_default_fbo_desc.texture.samples = static_cast<uint16_t>(attrib_values[0]);
 		}
 	}
+
+	// Load GL_EXT_memory_object and GL_EXT_memory_object_win32 functions
+	glCreateMemoryObjectsEXT = (PFNGLCREATEMEMORYOBJECTSEXTPROC)wglGetProcAddress("glCreateMemoryObjectsEXT");
+	glDeleteMemoryObjectsEXT = (PFNGLDELETEMEMORYOBJECTSEXTPROC)wglGetProcAddress("glDeleteMemoryObjectsEXT");
+	glImportMemoryWin32HandleEXT = (PFNGLIMPORTMEMORYWIN32HANDLEEXTPROC)wglGetProcAddress("glImportMemoryWin32HandleEXT");
+	glImportMemoryWin32NameEXT = (PFNGLIMPORTMEMORYWIN32NAMEEXTPROC)wglGetProcAddress("glImportMemoryWin32NameEXT");
+	glBufferStorageMemEXT = (PFNGLBUFFERSTORAGEMEMEXTPROC)wglGetProcAddress("glBufferStorageMemEXT");
+	glTexStorageMem2DEXT = (PFNGLTEXSTORAGEMEM2DEXTPROC)wglGetProcAddress("glTexStorageMem2DEXT");
+	glTexStorageMem3DEXT = (PFNGLTEXSTORAGEMEM3DEXTPROC)wglGetProcAddress("glTexStorageMem3DEXT");
+	glTexStorageMem2DMultisampleEXT = (PFNGLTEXSTORAGEMEM2DMULTISAMPLEEXTPROC)wglGetProcAddress("glTexStorageMem2DMultisampleEXT");
+	glTexStorageMem3DMultisampleEXT = (PFNGLTEXSTORAGEMEM3DMULTISAMPLEEXTPROC)wglGetProcAddress("glTexStorageMem3DMultisampleEXT");
 
 	// Check whether this context supports Direct State Access
 	_supports_dsa = gl3wIsSupported(4, 5);
@@ -144,6 +205,21 @@ reshade::opengl::device_impl::~device_impl()
 	// Free range of reserved resource names
 	gl.DeleteBuffers(static_cast<GLsizei>(_reserved_buffer_names.size()), _reserved_buffer_names.data());
 	gl.DeleteTextures(static_cast<GLsizei>(_reserved_texture_names.size()), _reserved_texture_names.data());
+
+#ifdef USE_VULKAN_UTILS
+	if (g_vulkan_device != VK_NULL_HANDLE)
+	{
+		pfn_vkDestroyDevice(g_vulkan_device, nullptr);
+		g_vulkan_device = VK_NULL_HANDLE;
+	}
+	// g_physical_device is automatically released on vkDestroyInstance
+	if (g_vulkan_instance != VK_NULL_HANDLE)
+	{
+		pfn_vkDestroyInstance(g_vulkan_instance, nullptr);
+		g_vulkan_instance = VK_NULL_HANDLE;
+	}
+#endif
+
 }
 
 bool reshade::opengl::device_impl::get_property(api::device_properties property, void *data) const
@@ -383,7 +459,7 @@ void reshade::opengl::device_impl::destroy_sampler(api::sampler sampler)
 	gl.DeleteSamplers(1, &object);
 }
 
-bool reshade::opengl::device_impl::create_resource(const api::resource_desc &desc, const api::subresource_data *initial_data, api::resource_usage, api::resource *out_resource, HANDLE * /*shared_handle*/)
+bool reshade::opengl::device_impl::create_resource(const api::resource_desc &desc, const api::subresource_data *initial_data, api::resource_usage, api::resource *out_resource, HANDLE *shared_handle)
 {
 	*out_resource = { 0 };
 
@@ -452,7 +528,7 @@ bool reshade::opengl::device_impl::create_resource(const api::resource_desc &des
 		return false;
 	}
 
-#if 0
+#if 1
 	GLenum shared_handle_type = GL_NONE;
 	if ((desc.flags & api::resource_flags::shared) != 0)
 	{
@@ -493,16 +569,16 @@ bool reshade::opengl::device_impl::create_resource(const api::resource_desc &des
 		GLbitfield storage_flags = GL_NONE;
 		convert_resource_desc(desc, buffer_size, storage_flags);
 
-#if 0
+#if 1
 		if (shared_handle_type != GL_NONE)
 		{
 			GLuint mem = 0;
-			gl.CreateMemoryObjectsEXT(1, &mem);
-			gl.ImportMemoryWin32HandleEXT(mem, buffer_size, shared_handle_type, *shared_handle);
+			glCreateMemoryObjectsEXT(1, &mem);
+			glImportMemoryWin32HandleEXT(mem, buffer_size, shared_handle_type, *shared_handle);
 
-			gl.BufferStorageMemEXT(target, buffer_size, mem, 0);
+			glBufferStorageMemEXT(target, buffer_size, mem, 0);
 
-			gl.DeleteMemoryObjectsEXT(1, &mem);
+			glDeleteMemoryObjectsEXT(1, &mem);
 		}
 		else
 #endif
@@ -553,33 +629,39 @@ bool reshade::opengl::device_impl::create_resource(const api::resource_desc &des
 
 		GLuint depth_or_layers = desc.texture.depth_or_layers;
 
-#if 0
+#if 1
 		if (shared_handle_type != GL_NONE)
 		{
+
+			GLuint64 import_size = get_image_memory_requirements(desc);
+
+			if (import_size == 0)
+			{
+				gl.DeleteTextures(1, &object);
+				return false;
+			}
+
 			GLuint mem = 0;
-			gl.CreateMemoryObjectsEXT(1, &mem);
+			glCreateMemoryObjectsEXT(1, &mem);
 
-			GLuint64 import_size = 0;
-			for (uint32_t level = 0, width = desc.texture.width, height = desc.texture.height; level < levels; ++level, width /= 2, height /= 2)
-				import_size += api::format_slice_pitch(desc.texture.format, api::format_row_pitch(desc.texture.format, width), height);
-			import_size *= desc.texture.depth_or_layers;
+			
 
-			gl.ImportMemoryWin32HandleEXT(mem, import_size, shared_handle_type, *shared_handle);
+			glImportMemoryWin32HandleEXT(mem, import_size, shared_handle_type, *shared_handle);
 
 			switch (target)
 			{
 			case GL_TEXTURE_1D:
 			case GL_TEXTURE_1D_ARRAY:
-				gl.TexStorageMem2DEXT(target, levels, internal_format, desc.texture.width, depth_or_layers, mem, 0);
+				glTexStorageMem2DEXT(target, levels, internal_format, desc.texture.width, depth_or_layers, mem, 0);
 				break;
 			case GL_TEXTURE_CUBE_MAP:
 				assert(depth_or_layers == 6);
 				[[fallthrough]];
 			case GL_TEXTURE_2D:
-				gl.TexStorageMem2DEXT(target, levels, internal_format, desc.texture.width, desc.texture.height, mem, 0);
+				glTexStorageMem2DEXT(target, levels, internal_format, desc.texture.width, desc.texture.height, mem, 0);
 				break;
 			case GL_TEXTURE_2D_MULTISAMPLE:
-				gl.TexStorageMem2DMultisampleEXT(target, desc.texture.samples, internal_format, desc.texture.width, desc.texture.height, GL_FALSE, mem, 0);
+				glTexStorageMem2DMultisampleEXT(target, desc.texture.samples, internal_format, desc.texture.width, desc.texture.height, GL_FALSE, mem, 0);
 				break;
 			case GL_TEXTURE_CUBE_MAP_ARRAY:
 				assert((depth_or_layers % 6) == 0);
@@ -587,14 +669,14 @@ bool reshade::opengl::device_impl::create_resource(const api::resource_desc &des
 				[[fallthrough]];
 			case GL_TEXTURE_2D_ARRAY:
 			case GL_TEXTURE_3D:
-				gl.TexStorageMem3DEXT(target, levels, internal_format, desc.texture.width, desc.texture.height, depth_or_layers, mem, 0);
+				glTexStorageMem3DEXT(target, levels, internal_format, desc.texture.width, desc.texture.height, depth_or_layers, mem, 0);
 				break;
 			case GL_TEXTURE_2D_MULTISAMPLE_ARRAY:
-				gl.TexStorageMem3DMultisampleEXT(target, desc.texture.samples, internal_format, desc.texture.width, desc.texture.height, depth_or_layers, GL_FALSE, mem, 0);
+				glTexStorageMem3DMultisampleEXT(target, desc.texture.samples, internal_format, desc.texture.width, desc.texture.height, depth_or_layers, GL_FALSE, mem, 0);
 				break;
 			}
 
-			gl.DeleteMemoryObjectsEXT(1, &mem);
+			glDeleteMemoryObjectsEXT(1, &mem);
 		}
 		else
 #endif
@@ -2528,4 +2610,144 @@ void reshade::opengl::device_impl::get_acceleration_structure_size(api::accelera
 bool reshade::opengl::device_impl::get_pipeline_shader_group_handles(api::pipeline, uint32_t, uint32_t, void *)
 {
 	return false;
+}
+
+GLuint64 reshade::opengl::device_impl::get_image_memory_requirements(const reshade::api::resource_desc &desc)
+{
+
+	GLuint64 value = 0;
+#ifdef USE_VULKAN_UTILS
+	if (g_vulkan_failed) 
+#endif
+	{
+		GLuint levels = desc.texture.levels;
+		if (levels == 0)
+		{
+			DWORD bit_index = 0;
+			BitScanReverse(&bit_index, std::max(desc.texture.width, desc.texture.height));
+			levels = static_cast<GLuint>(bit_index) + 1;
+		}
+
+		for (uint32_t level = 0, width = desc.texture.width, height = desc.texture.height; level < levels; ++level, width /= 2, height /= 2)
+			value += api::format_slice_pitch(desc.texture.format, api::format_row_pitch(desc.texture.format, width), height);
+		value *= desc.texture.depth_or_layers;
+		return value;
+	}
+#ifdef USE_VULKAN_UTILS
+	if (g_vulkan_instance == VK_NULL_HANDLE || g_vulkan_device == VK_NULL_HANDLE)
+	{
+		const auto vulkan_module = LoadLibraryW(L"vulkan-1.dll");
+		if (vulkan_module == nullptr)
+		{
+			reshade::log::message(reshade::log::level::error, "Failed to get handle to Vulkan module.");
+			g_vulkan_failed = true;
+			return get_image_memory_requirements(desc);
+		}
+
+		auto vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)GetProcAddress(vulkan_module, "vkGetInstanceProcAddr");
+		if (vkGetInstanceProcAddr == nullptr)
+		{
+			reshade::log::message(reshade::log::level::error, "Failed to get 'vkGetInstanceProcAddr' function pointer.");
+			g_vulkan_failed = true;
+			return get_image_memory_requirements(desc);
+		}
+
+		VkApplicationInfo app { VK_STRUCTURE_TYPE_APPLICATION_INFO };
+
+		app.pNext = NULL;
+		app.pApplicationName = "Reshade Utility";
+		app.applicationVersion = 0;
+		app.engineVersion = 0;
+		app.apiVersion = VK_API_VERSION_1_0;
+
+		VkInstanceCreateInfo inst_info = { VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO };
+		inst_info.pNext = NULL;
+		inst_info.pApplicationInfo = &app;
+		inst_info.enabledLayerCount = 0;
+		inst_info.ppEnabledLayerNames = NULL;
+		inst_info.enabledExtensionCount = 0;
+		inst_info.ppEnabledExtensionNames = NULL;
+
+		auto vkCreateInstance = (PFN_vkCreateInstance)vkGetInstanceProcAddr(nullptr, "vkCreateInstance");
+		if (vkCreateInstance == nullptr)
+		{
+			reshade::log::message(reshade::log::level::error, "Failed to get 'vkCreateInstance' function pointer.");
+			g_vulkan_failed = true;
+			return get_image_memory_requirements(desc);
+		}
+		VkResult result = vkCreateInstance(&inst_info, nullptr, &g_vulkan_instance);
+		if (result != VK_SUCCESS || g_vulkan_instance == VK_NULL_HANDLE)
+		{
+			reshade::log::message(reshade::log::level::error, "Failed to create Vulkan instance. Error code: %d", result);
+			g_vulkan_failed = true;
+			return get_image_memory_requirements(desc);
+		}
+
+		auto vkEnumeratePhysicalDevices = (PFN_vkEnumeratePhysicalDevices)vkGetInstanceProcAddr(g_vulkan_instance, "vkEnumeratePhysicalDevices");
+
+		if (vkEnumeratePhysicalDevices == nullptr)
+		{
+			reshade::log::message(reshade::log::level::error, "Failed to get 'vkEnumeratePhysicalDevices' function pointer.");
+			g_vulkan_failed = true;
+			return get_image_memory_requirements(desc);
+		}
+		
+		uint32_t gpu_count = 0;
+		vkEnumeratePhysicalDevices(g_vulkan_instance, &gpu_count, nullptr);
+
+		if (gpu_count == 0)
+		{
+			reshade::log::message(reshade::log::level::error, "No Vulkan-compatible GPUs found.");
+			g_vulkan_failed = true;
+			return get_image_memory_requirements(desc);
+		}
+
+		
+		vkEnumeratePhysicalDevices(g_vulkan_instance, &gpu_count, &g_physical_device);
+
+		float queue_priority = 1.0f;
+		VkDeviceQueueCreateInfo queue_info = {};
+		queue_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_info.queueFamilyIndex = 0;
+		queue_info.queueCount = 1;
+		queue_info.pQueuePriorities = &queue_priority;
+
+		VkDeviceCreateInfo device_info = {};
+		device_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+		device_info.queueCreateInfoCount = 1;
+		device_info.pQueueCreateInfos = &queue_info;
+
+		auto vkCreateDevice = (PFN_vkCreateDevice)vkGetInstanceProcAddr(g_vulkan_instance, "vkCreateDevice");
+		VkResult dev_result = vkCreateDevice(g_physical_device, &device_info, nullptr, &g_vulkan_device);
+		if (dev_result != VK_SUCCESS || g_vulkan_device == VK_NULL_HANDLE)
+		{
+			reshade::log::message(reshade::log::level::error, "Failed to create Vulkan device. Error code: %d", dev_result);
+			g_vulkan_failed = true;
+			return get_image_memory_requirements(desc);
+		}
+
+		pfn_vkCreateImage = (PFN_vkCreateImage)vkGetInstanceProcAddr(g_vulkan_instance, "vkCreateImage");
+		pfn_vkGetImageMemoryRequirements = (PFN_vkGetImageMemoryRequirements)vkGetInstanceProcAddr(g_vulkan_instance, "vkGetImageMemoryRequirements");
+		pfn_vkDestroyImage = (PFN_vkDestroyImage)vkGetInstanceProcAddr(g_vulkan_instance, "vkDestroyImage");
+		pfn_vkDestroyDevice = (PFN_vkDestroyDevice)vkGetInstanceProcAddr(g_vulkan_instance, "vkDestroyDevice");
+		pfn_vkDestroyInstance = (PFN_vkDestroyInstance)vkGetInstanceProcAddr(g_vulkan_instance, "vkDestroyInstance");
+	}
+
+	VkImageCreateInfo image_info = { VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
+	reshade::vulkan::convert_resource_desc(desc, image_info);
+	VkMemoryRequirements memory_requirements = {};
+	VkImage dummy_image;
+	pfn_vkCreateImage(g_vulkan_device, &image_info, nullptr, &dummy_image);
+	if (dummy_image == VK_NULL_HANDLE)
+	{
+		reshade::log::message(reshade::log::level::error, "Failed to create dummy Vulkan image for memory requirements.");
+		return 0;
+	}
+
+	pfn_vkGetImageMemoryRequirements(g_vulkan_device, dummy_image, &memory_requirements);
+	pfn_vkDestroyImage(g_vulkan_device, dummy_image, nullptr);
+	value = memory_requirements.size;
+
+	return value;
+#endif
 }

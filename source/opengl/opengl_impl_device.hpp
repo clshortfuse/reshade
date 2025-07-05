@@ -91,6 +91,8 @@ namespace reshade::opengl
 
 		bool get_pipeline_shader_group_handles(api::pipeline pipeline, uint32_t first, uint32_t count, void *out_handles) final;
 
+		GLuint64 reshade::opengl::device_impl::get_image_memory_requirements(const reshade::api::resource_desc &desc);
+
 	protected:
 		// Cached context information for quick access
 		int  _pixel_format;
