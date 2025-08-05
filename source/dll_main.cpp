@@ -331,7 +331,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 					const auto get_target_path = [](bool any, const wchar_t *dll) { return any ? dll : get_system_path() / dll; };
 
 					// Only register DirectX hooks when module is not called opengl32.dll
-					if ((!is_opengl && !streamline) || config.get("INSTALL", "HookDirectX"))
+					if ((true || !is_opengl && !streamline) || config.get("INSTALL", "HookDirectX"))
 					{
 						// Register DirectDraw module in case it was used to load ReShade (but ignore otherwise)
 						if (_wcsicmp(module_name.c_str(), L"ddraw") == 0)
