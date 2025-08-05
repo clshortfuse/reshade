@@ -317,7 +317,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 					}
 
 					// Only register DirectX hooks when module is not called opengl32.dll
-					if ((!is_opengl && !streamline) || config.get("INSTALL", "HookDirectX"))
+					if ((true || !is_opengl && !streamline) || config.get("INSTALL", "HookDirectX"))
 					{
 						// Register DirectDraw module in case it was used to load ReShade (but ignore otherwise)
 						if (_wcsicmp(module_name.c_str(), L"ddraw") == 0)
