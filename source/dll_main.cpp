@@ -341,11 +341,14 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 			}
 
 			reshade::log::message(reshade::log::level::info, "Initialized.");
+			reshade::load_addons();
 			break;
 		}
 		case DLL_PROCESS_DETACH:
 		{
 			reshade::log::message(reshade::log::level::info, "Exiting ...");
+
+			reshade::unload_addons();
 
 #if RESHADE_ADDON
 			if (reshade::has_loaded_addons())
