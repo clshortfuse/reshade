@@ -354,7 +354,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
 #if RESHADE_ADDON
 			// It is not safe to call 'LoadLibrary' from 'DllMain', but there are cases where add-ons want to be loaded as early as possible, so at least give the option
-			if (config.get("ADDON", "LoadFromDllMain"))
+			if (true || config.get("ADDON", "LoadFromDllMain"))
 			{
 				reshade::load_addons();
 			}
@@ -364,6 +364,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 		case DLL_PROCESS_DETACH:
 		{
 			reshade::log::message(reshade::log::level::info, "Exiting ...");
+
+			reshade::unload_addons();
 
 #if RESHADE_ADDON
 			if (reshade::has_loaded_addons())
