@@ -12,6 +12,8 @@
 
 using reshade::d3d12::to_handle;
 
+struct DECLSPEC_UUID("7c9d2da5-4183-4188-aece-b1d66a98aa0a") ReShadeRetrieveBaseInterface : IUnknown {};
+
 D3D12GraphicsCommandList::D3D12GraphicsCommandList(D3D12Device *device, ID3D12GraphicsCommandList *original) :
 	command_list_impl(device, original),
 	_device(device)
@@ -80,6 +82,13 @@ HRESULT STDMETHODCALLTYPE D3D12GraphicsCommandList::QueryInterface(REFIID riid, 
 {
 	if (ppvObj == nullptr)
 		return E_POINTER;
+
+	if (riid == __uuidof(ReShadeRetrieveBaseInterface))
+	{
+		_orig->AddRef();
+		*ppvObj = _orig;
+		return S_OK;
+	}
 
 	if (check_and_upgrade_interface(riid))
 	{

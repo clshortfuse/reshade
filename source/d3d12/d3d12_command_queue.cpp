@@ -10,6 +10,8 @@
 #include "dll_log.hpp"
 #include "addon_manager.hpp"
 
+struct DECLSPEC_UUID("7c9d2da5-4183-4188-aece-b1d66a98aa0a") ReShadeRetrieveBaseInterface : IUnknown {};
+
 D3D12CommandQueue::D3D12CommandQueue(D3D12Device *device, ID3D12CommandQueue *original) :
 	command_queue_impl(device, original),
 	_device(device)
@@ -72,6 +74,13 @@ HRESULT STDMETHODCALLTYPE D3D12CommandQueue::QueryInterface(REFIID riid, void **
 {
 	if (ppvObj == nullptr)
 		return E_POINTER;
+
+	if (riid == __uuidof(ReShadeRetrieveBaseInterface))
+	{
+		_orig->AddRef();
+		*ppvObj = _orig;
+		return S_OK;
+	}
 
 	if (check_and_upgrade_interface(riid))
 	{
