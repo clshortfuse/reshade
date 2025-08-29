@@ -367,7 +367,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 #if RESHADE_ADDON >= 2
 			// It is not safe to call 'LoadLibrary' from 'DllMain', but there are cases where add-ons want to be loaded as early as possible, so at least give the option
 			if (std::vector<std::filesystem::path> addons;
-				config.get("ADDON", "LoadFromDllMain", addons))
+				true || config.get("ADDON", "LoadFromDllMain", addons))
 			{
 				std::filesystem::path addon_search_path = g_reshade_base_path;
 				if (config.get("ADDON", "AddonPath", addon_search_path))
