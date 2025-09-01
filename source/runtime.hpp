@@ -168,6 +168,8 @@ namespace reshade
 
 		void reload_effect_next_frame(const char *effect_name) final;
 
+		inline void set_native(uint64_t new_native) { _swapchain->set_native(new_native); };
+
 	private:
 		static void check_for_update();
 

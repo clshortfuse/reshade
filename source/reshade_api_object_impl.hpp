@@ -80,6 +80,8 @@ namespace reshade::api
 
 		T _orig;
 
+		inline void set_native(uint64_t new_value) { _orig = (T)new_value; }
+
 	protected:
 		template <typename... Args>
 		explicit api_object_impl(T orig, Args... args) : api_object_base(std::forward<Args>(args)...)..., _orig(orig) {}
