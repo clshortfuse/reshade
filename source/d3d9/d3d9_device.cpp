@@ -9,6 +9,10 @@
 #include "d3d9on12_device.hpp"
 #include "d3d9_impl_type_convert.hpp"
 #include "dll_log.hpp" // Include late to get 'hr_to_string' helper function
+#include "DX9ExManagedTexture.hpp"
+#include "DX9ExManagedVertexBuffer.hpp"
+#include "DX9ExManagedIndexBuffer.hpp"
+#include "DX9ExManagedProxyIID.hpp"
 #include "com_utils.hpp"
 #include "hook_manager.hpp"
 #include "addon_manager.hpp"
@@ -417,7 +421,9 @@ void    STDMETHODCALLTYPE Direct3DDevice9::GetGammaRamp(UINT iSwapChain, D3DGAMM
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DTexture9 **ppTexture, HANDLE *pSharedHandle)
 {
 #if RESHADE_ADDON >= 2
-	modify_pool_for_d3d9ex(Usage, Pool);
+	const bool upgraded_to_ex = modify_pool_for_d3d9ex(Usage, Pool);
+#else
+	const bool upgraded_to_ex = false;
 #endif
 
 #if RESHADE_ADDON
@@ -428,7 +434,15 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height
 		reshade::invoke_addon_event<reshade::addon_event::create_resource>(this, desc, nullptr, reshade::api::resource_usage::general))
 		reshade::d3d9::convert_resource_desc(desc, internal_desc, &Levels, nullptr, _caps);
 
-	const HRESULT hr = _orig->CreateTexture(internal_desc.Width, internal_desc.Height, Levels, internal_desc.Usage, internal_desc.Format, internal_desc.Pool, ppTexture, pSharedHandle);
+	HRESULT hr = D3D_OK;
+	if (upgraded_to_ex)
+	{
+		hr = CreateDX9ExManagedTexture(_orig, internal_desc.Width, internal_desc.Height, Levels, internal_desc.Usage, internal_desc.Format, internal_desc.Pool, ppTexture, pSharedHandle);
+	}
+	else
+	{
+		hr = _orig->CreateTexture(internal_desc.Width, internal_desc.Height, Levels, internal_desc.Usage, internal_desc.Format, internal_desc.Pool, ppTexture, pSharedHandle);
+	}
 #else
 	const HRESULT hr = _orig->CreateTexture(Width, Height, Levels, Usage, Format, Pool, ppTexture, pSharedHandle);
 #endif
@@ -525,8 +539,9 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVolumeTexture(UINT Width, UINT Height, UINT Depth, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DVolumeTexture9 **ppVolumeTexture, HANDLE *pSharedHandle)
 {
+	bool upgraded_to_ex = false;
 #if RESHADE_ADDON >= 2
-	modify_pool_for_d3d9ex(Usage, Pool);
+	upgraded_to_ex = modify_pool_for_d3d9ex(Usage, Pool) != 0;
 #endif
 
 #if RESHADE_ADDON
@@ -610,7 +625,9 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVolumeTexture(UINT Width, UINT 
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateCubeTexture(UINT EdgeLength, UINT Levels, DWORD Usage, D3DFORMAT Format, D3DPOOL Pool, IDirect3DCubeTexture9 **ppCubeTexture, HANDLE *pSharedHandle)
 {
 #if RESHADE_ADDON >= 2
-	modify_pool_for_d3d9ex(Usage, Pool);
+	const bool upgraded_to_ex = modify_pool_for_d3d9ex(Usage, Pool);
+#else
+	const bool upgraded_to_ex = false;
 #endif
 
 #if RESHADE_ADDON
@@ -728,7 +745,9 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 	if (_use_software_rendering)
 		Usage |= D3DUSAGE_SOFTWAREPROCESSING;
 #if RESHADE_ADDON >= 2
-	modify_pool_for_d3d9ex(Usage, Pool);
+	const bool upgraded_to_ex = modify_pool_for_d3d9ex(Usage, Pool);
+#else
+	const bool upgraded_to_ex = false;
 #endif
 
 #if RESHADE_ADDON
@@ -738,7 +757,16 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexBuffer(UINT Length, DWORD
 	if (reshade::invoke_addon_event<reshade::addon_event::create_resource>(this, desc, nullptr, reshade::api::resource_usage::general))
 		reshade::d3d9::convert_resource_desc(desc, internal_desc);
 
-	const HRESULT hr = _orig->CreateVertexBuffer(internal_desc.Size, internal_desc.Usage, internal_desc.FVF, internal_desc.Pool, ppVertexBuffer, pSharedHandle);
+	HRESULT hr;
+	if (upgraded_to_ex)
+	{
+		hr = CreateDX9ExManagedVertexBuffer(_orig, internal_desc.Size, internal_desc.Usage, internal_desc.FVF, internal_desc.Pool, ppVertexBuffer, pSharedHandle);
+	}
+	else
+	{
+		hr = _orig->CreateVertexBuffer(internal_desc.Size, internal_desc.Usage, internal_desc.FVF, internal_desc.Pool, ppVertexBuffer, pSharedHandle);
+	}
+	
 #else
 	const HRESULT hr = _orig->CreateVertexBuffer(Length, Usage, FVF, Pool, ppVertexBuffer, pSharedHandle);
 #endif
@@ -782,7 +810,9 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateIndexBuffer(UINT Length, DWORD 
 	if (_use_software_rendering)
 		Usage |= D3DUSAGE_SOFTWAREPROCESSING;
 #if RESHADE_ADDON >= 2
-	modify_pool_for_d3d9ex(Usage, Pool);
+	const bool upgraded_to_ex = modify_pool_for_d3d9ex(Usage, Pool);
+#else
+	const bool upgraded_to_ex = false;
 #endif
 
 #if RESHADE_ADDON
@@ -792,7 +822,16 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateIndexBuffer(UINT Length, DWORD 
 	if (reshade::invoke_addon_event<reshade::addon_event::create_resource>(this, desc, nullptr, reshade::api::resource_usage::general))
 		reshade::d3d9::convert_resource_desc(desc, internal_desc);
 
-	const HRESULT hr = _orig->CreateIndexBuffer(internal_desc.Size, internal_desc.Usage, internal_desc.Format, internal_desc.Pool, ppIndexBuffer, pSharedHandle);
+	HRESULT hr = D3D_OK;
+	// If we upgraded MANAGED -> DEFAULT for DX9Ex, create a proxy that lazily provides a system-memory copy.
+	if (upgraded_to_ex)
+	{
+	hr = CreateDX9ExManagedIndexBuffer(_orig, internal_desc.Size, internal_desc.Usage, internal_desc.Format, internal_desc.Pool, ppIndexBuffer, pSharedHandle);
+	}
+	else
+	{
+		hr = _orig->CreateIndexBuffer(internal_desc.Size, internal_desc.Usage, internal_desc.Format, internal_desc.Pool, ppIndexBuffer, pSharedHandle);
+	}
 #else
 	const HRESULT hr = _orig->CreateIndexBuffer(Length, Usage, Format, Pool, ppIndexBuffer, pSharedHandle);
 #endif
@@ -1535,6 +1574,45 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::GetTexture(DWORD Stage, IDirect3DBase
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::SetTexture(DWORD Stage, IDirect3DBaseTexture9 *pTexture)
 {
+	// Use a shared IID defined in DX9ExManagedProxyIID.hpp
+	// If this is our proxy texture (identified via QueryInterface), have it sync and set the real GPU texture on the underlying device
+	if (pTexture != nullptr)
+	{
+		void *marker = nullptr;
+		if (SUCCEEDED(pTexture->QueryInterface(IID_DX9EX_MANAGED_PROXY, &marker)))
+		{
+			reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for texture %p in %s; unwrapping.", pTexture, __FUNCTION__);
+			// Identified as our proxy; release the marker and treat as DX9ExManagedTexture
+			static_cast<IUnknown *>(marker)->Release();
+			DX9ExManagedTexture *const proxy = reinterpret_cast<DX9ExManagedTexture *>(pTexture);
+			const HRESULT hr = proxy->SetTexture(_orig, Stage);
+#if RESHADE_ADDON >= 2
+			if (SUCCEEDED(hr) &&
+				reshade::has_addon_event<reshade::addon_event::push_descriptors>())
+			{
+				reshade::api::shader_stage shader_stage = reshade::api::shader_stage::pixel;
+				if (Stage >= D3DVERTEXTEXTURESAMPLER0)
+				{
+					shader_stage = reshade::api::shader_stage::vertex;
+					Stage -= D3DVERTEXTEXTURESAMPLER0;
+				}
+
+				reshade::api::sampler_with_resource_view descriptor_data = {
+					reshade::api::sampler { 0 },
+					reshade::api::resource_view { reinterpret_cast<uintptr_t>(proxy) }
+				};
+
+				reshade::invoke_addon_event<reshade::addon_event::push_descriptors>(
+					this,
+					shader_stage,
+					_global_pipeline_layout, shader_stage == reshade::api::shader_stage::vertex ? 0 : 1,
+					reshade::api::descriptor_table_update { {}, Stage, 0, 1, reshade::api::descriptor_type::sampler_with_resource_view, &descriptor_data });
+			}
+#endif
+			return hr;
+		}
+	}
+
 	const HRESULT hr = _orig->SetTexture(Stage, pTexture);
 #if RESHADE_ADDON >= 2
 	if (SUCCEEDED(hr) &&
@@ -1848,7 +1926,24 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::ProcessVertices(UINT SrcStartIndex, U
 
 	HRESULT hr = D3D_OK;
 	if (reshade::invoke_addon_event<reshade::addon_event::draw>(this, VertexCount, 1, SrcStartIndex, 0) == false)
-		hr = _orig->ProcessVertices(SrcStartIndex, _current_stream_output_offset, VertexCount, _current_stream_output, pVertexDecl, Flags);
+	{
+		// Ensure we don't pass a wrapper proxy to the raw device; unwrap stream output if needed.
+		IDirect3DVertexBuffer9 *bindStreamOutput = _current_stream_output;
+		if (bindStreamOutput != nullptr)
+		{
+			void *marker = nullptr;
+			if (SUCCEEDED(bindStreamOutput->QueryInterface(IID_DX9EX_MANAGED_PROXY, &marker)))
+			{
+				reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for stream-output buffer %p in %s; unwrapping.", bindStreamOutput, __FUNCTION__);
+				static_cast<IUnknown *>(marker)->Release();
+				DX9ExManagedVertexBuffer *const vb_proxy = reinterpret_cast<DX9ExManagedVertexBuffer *>(bindStreamOutput);
+				vb_proxy->SyncIfNeeded();
+				bindStreamOutput = vb_proxy->GetGpuBuffer();
+			}
+		}
+
+		hr = _orig->ProcessVertices(SrcStartIndex, _current_stream_output_offset, VertexCount, bindStreamOutput, pVertexDecl, Flags);
+	}
 
 	const reshade::api::resource prev_buffer = { 0 };
 	const uint64_t prev_offset_64 = 0;
@@ -1861,7 +1956,23 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::ProcessVertices(UINT SrcStartIndex, U
 
 	return hr;
 #else
-	return _orig->ProcessVertices(SrcStartIndex, DestIndex, VertexCount, pDestBuffer, pVertexDecl, Flags);
+	// If our managed VB proxy is passed in, ensure it is synced and bind its underlying GPU buffer instead
+	IDirect3DVertexBuffer9 *bindDest = pDestBuffer;
+	if (pDestBuffer != nullptr)
+	{
+		void *marker = nullptr;
+		if (SUCCEEDED(pDestBuffer->QueryInterface(IID_DX9EX_MANAGED_PROXY, &marker)))
+		{
+			reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for destination buffer %p in %s; unwrapping.", pDestBuffer, __FUNCTION__);
+			// It's our proxy type
+			static_cast<IUnknown *>(marker)->Release();
+			DX9ExManagedVertexBuffer *const vb_proxy = reinterpret_cast<DX9ExManagedVertexBuffer *>(pDestBuffer);
+			vb_proxy->SyncIfNeeded();
+			bindDest = vb_proxy->GetGpuBuffer();
+		}
+	}
+
+	return _orig->ProcessVertices(SrcStartIndex, DestIndex, VertexCount, bindDest, pVertexDecl, Flags);
 #endif
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateVertexDeclaration(const D3DVERTEXELEMENT9 *pVertexElements, IDirect3DVertexDeclaration9 **ppDecl)
@@ -2069,12 +2180,28 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::GetVertexShaderConstantB(UINT StartRe
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::SetStreamSource(UINT StreamNumber, IDirect3DVertexBuffer9 *pStreamData, UINT OffsetInBytes, UINT Stride)
 {
-	const HRESULT hr = _orig->SetStreamSource(StreamNumber, pStreamData, OffsetInBytes, Stride);
+	// If our vertex buffer proxy is passed in, ensure it synced and bind its underlying GPU buffer instead
+	IDirect3DVertexBuffer9 *bindBuffer = pStreamData;
+	if (pStreamData != nullptr)
+	{
+	void *marker = nullptr;
+	if (SUCCEEDED(pStreamData->QueryInterface(IID_DX9EX_MANAGED_PROXY, &marker)))
+		{
+		reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for stream data %p in %s; unwrapping.", pStreamData, __FUNCTION__);
+			// It's our proxy type
+			static_cast<IUnknown *>(marker)->Release();
+			DX9ExManagedVertexBuffer *const vb_proxy = reinterpret_cast<DX9ExManagedVertexBuffer *>(pStreamData);
+			vb_proxy->SyncIfNeeded();
+			bindBuffer = vb_proxy->GetGpuBuffer();
+		}
+	}
+
+	const HRESULT hr = _orig->SetStreamSource(StreamNumber, bindBuffer, OffsetInBytes, Stride);
 #if RESHADE_ADDON >= 2
 	if (SUCCEEDED(hr) &&
 		reshade::has_addon_event<reshade::addon_event::bind_vertex_buffers>())
 	{
-		const reshade::api::resource buffer = to_handle(pStreamData);
+		const reshade::api::resource buffer = to_handle(bindBuffer);
 		const uint64_t offset_64 = OffsetInBytes;
 
 		reshade::invoke_addon_event<reshade::addon_event::bind_vertex_buffers>(this, StreamNumber, 1, &buffer, &offset_64, &Stride);
@@ -2097,7 +2224,23 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::GetStreamSourceFreq(UINT StreamNumber
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::SetIndices(IDirect3DIndexBuffer9 *pIndexData)
 {
-	const HRESULT hr = _orig->SetIndices(pIndexData);
+	// If we later implement an index buffer proxy, unwrap it here before binding
+	IDirect3DIndexBuffer9 *bindIndex = pIndexData;
+	if (pIndexData != nullptr)
+	{
+	void *marker = nullptr;
+	if (SUCCEEDED(pIndexData->QueryInterface(IID_DX9EX_MANAGED_PROXY, &marker)))
+		{
+		reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for index data %p in %s; unwrapping.", pIndexData, __FUNCTION__);
+			static_cast<IUnknown *>(marker)->Release();
+			// Best-effort cast to a type that exposes GetGpuBuffer if implemented in future
+			struct DX9ExManagedIndexBuffer { virtual IDirect3DIndexBuffer9 *GetGpuBuffer() = 0; };
+			DX9ExManagedIndexBuffer *const ib_proxy = reinterpret_cast<DX9ExManagedIndexBuffer *>(pIndexData);
+			bindIndex = ib_proxy->GetGpuBuffer();
+		}
+	}
+
+	const HRESULT hr = _orig->SetIndices(bindIndex);
 #if RESHADE_ADDON >= 2
 	if (SUCCEEDED(hr) &&
 		reshade::has_addon_event<reshade::addon_event::bind_index_buffer>())
@@ -2276,7 +2419,36 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::SetConvolutionMonoKernel(UINT width, 
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::ComposeRects(IDirect3DSurface9 *pSrc, IDirect3DSurface9 *pDst, IDirect3DVertexBuffer9 *pSrcRectDescs, UINT NumRects, IDirect3DVertexBuffer9 *pDstRectDescs, D3DCOMPOSERECTSOP Operation, int Xoffset, int Yoffset)
 {
 	assert(_extended_interface);
-	return static_cast<IDirect3DDevice9Ex *>(_orig)->ComposeRects(pSrc, pDst, pSrcRectDescs, NumRects, pDstRectDescs, Operation, Xoffset, Yoffset);
+	// Unwrap any DX9Ex managed vertex buffer proxies so the raw device receives the GPU buffers.
+	IDirect3DVertexBuffer9 *srcRects = pSrcRectDescs;
+	if (pSrcRectDescs != nullptr)
+	{
+		void *marker = nullptr;
+		if (SUCCEEDED(pSrcRectDescs->QueryInterface(IID_DX9EX_MANAGED_PROXY, &marker)))
+		{
+			reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for source rect descs %p in %s; unwrapping.", pSrcRectDescs, __FUNCTION__);
+			static_cast<IUnknown *>(marker)->Release();
+			DX9ExManagedVertexBuffer *const vb_proxy = reinterpret_cast<DX9ExManagedVertexBuffer *>(pSrcRectDescs);
+			vb_proxy->SyncIfNeeded();
+			srcRects = vb_proxy->GetGpuBuffer();
+		}
+	}
+
+	IDirect3DVertexBuffer9 *dstRects = pDstRectDescs;
+	if (pDstRectDescs != nullptr)
+	{
+		void *marker = nullptr;
+		if (SUCCEEDED(pDstRectDescs->QueryInterface(IID_DX9EX_MANAGED_PROXY, &marker)))
+		{
+			reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for dest rect descs %p in %s; unwrapping.", pDstRectDescs, __FUNCTION__);
+			static_cast<IUnknown *>(marker)->Release();
+			DX9ExManagedVertexBuffer *const vb_proxy = reinterpret_cast<DX9ExManagedVertexBuffer *>(pDstRectDescs);
+			vb_proxy->SyncIfNeeded();
+			dstRects = vb_proxy->GetGpuBuffer();
+		}
+	}
+
+	return static_cast<IDirect3DDevice9Ex *>(_orig)->ComposeRects(pSrc, pDst, srcRects, NumRects, dstRects, Operation, Xoffset, Yoffset);
 }
 HRESULT STDMETHODCALLTYPE Direct3DDevice9::PresentEx(const RECT *pSourceRect, const RECT *pDestRect, HWND hDestWindowOverride, const RGNDATA *pDirtyRegion, DWORD dwFlags)
 {
@@ -2796,14 +2968,16 @@ void Direct3DDevice9::resize_primitive_up_buffers(UINT vertex_buffer_size, UINT 
 	}
 }
 
-void Direct3DDevice9::modify_pool_for_d3d9ex(DWORD &usage, D3DPOOL &pool) const
+bool Direct3DDevice9::modify_pool_for_d3d9ex(DWORD &usage, D3DPOOL &pool) const
 {
 	if (!_extended_interface)
-		return;
+		return false;
 	if (pool != D3DPOOL_MANAGED)
-		return;
+		return false;
 
 	pool = D3DPOOL_DEFAULT;
-	usage |= D3DUSAGE_DYNAMIC;
+	usage &= ~D3DUSAGE_DYNAMIC;
+
+	return true;
 }
 #endif

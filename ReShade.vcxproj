@@ -592,6 +592,11 @@
       <DisableSpecificWarnings Condition="'$(Configuration)'=='Debug App'">4458;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <ClCompile Include="source\d3d9\d3d9_swapchain.cpp" />
+    <ClCompile Include="source\d3d9\DX9ExManagedTexture.cpp" />
+    <ClCompile Include="source\d3d9\DX9ExManagedProxyIID.cpp" />
+    <ClCompile Include="source\d3d9\DX9ExManagedSurface.cpp" />
+    <ClCompile Include="source\d3d9\DX9ExManagedVertexBuffer.cpp" />
+    <ClCompile Include="source\d3d9\DX9ExManagedIndexBuffer.cpp" />
     <ClCompile Include="source\ddraw\ddraw.cpp" />
     <ClCompile Include="source\dll_log.cpp" />
     <ClCompile Include="source\dll_main.cpp" />

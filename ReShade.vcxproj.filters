@@ -11,6 +11,14 @@
       <UniqueIdentifier>{919a7a2f-0b83-4f71-a568-ed55d65e8a8f}</UniqueIdentifier>
     </Filter>
     <Filter Include="api\d3d11">
+    <File
+      Include="source\d3d9\DX9ExManagedVertexBuffer.cpp">
+      <Filter>api\d3d9</Filter>
+    </File>
+    <File
+      Include="source\d3d9\DX9ExManagedVertexBuffer2.cpp">
+      <Filter>api\d3d9</Filter>
+    </File>
       <UniqueIdentifier>{618641f0-deb1-4f45-8b1d-6594784c55cd}</UniqueIdentifier>
     </Filter>
     <Filter Include="api\d3d12">
@@ -241,6 +249,12 @@
       <Filter>api\d3d9</Filter>
     </ClCompile>
     <ClCompile Include="source\d3d9\d3d9_impl_swapchain.cpp">
+      <Filter>api\d3d9</Filter>
+    </ClCompile>
+    <ClCompile Include="source\d3d9\DX9ExManagedTexture.cpp">
+      <Filter>api\d3d9</Filter>
+    </ClCompile>
+    <ClCompile Include="source\d3d9\DX9ExManagedSurface.cpp">
       <Filter>api\d3d9</Filter>
     </ClCompile>
     <ClCompile Include="source\d3d9\d3d9_impl_type_convert.cpp">

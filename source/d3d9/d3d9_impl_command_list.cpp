@@ -5,9 +5,12 @@
 
 #include "d3d9_impl_device.hpp"
 #include "d3d9_impl_type_convert.hpp"
+#include "DX9ExManagedProxyIID.hpp"
+#include "DX9ExManagedVertexBuffer.hpp"
 #include <cstring> // std::strlen
 #include <algorithm> // std::max
 #include <utf8/unchecked.h>
+#include "dll_log.hpp"
 
 static void convert_cube_uv_to_vec(D3DCUBEMAP_FACES face, float u, float v, float &x, float &y, float &z)
 {
@@ -412,7 +415,21 @@ void reshade::d3d9::device_impl::bind_vertex_buffers(uint32_t first, uint32_t co
 	{
 		assert(offsets == nullptr || offsets[i] <= std::numeric_limits<UINT>::max());
 
-		_orig->SetStreamSource(first + i, reinterpret_cast<IDirect3DVertexBuffer9 *>(buffers[i].handle), offsets != nullptr ? static_cast<UINT>(offsets[i]) : 0, strides[i]);
+		// Unwrap DX9Ex managed vertex buffer proxies so the raw device never receives wrapper objects
+		IDirect3DVertexBuffer9 *bindBuf = reinterpret_cast<IDirect3DVertexBuffer9 *>(buffers[i].handle);
+		if (bindBuf != nullptr)
+		{
+			com_ptr<IUnknown> proxy_marker;
+				if (SUCCEEDED(bindBuf->QueryInterface(IID_DX9EX_MANAGED_PROXY, reinterpret_cast<void **>(&proxy_marker))) && proxy_marker)
+			{
+				// It's a managed proxy; sync and use underlying GPU buffer
+				auto *managed = static_cast<DX9ExManagedVertexBuffer *>(bindBuf);
+				managed->SyncIfNeeded();
+				bindBuf = managed->GetGpuBuffer();
+			}
+		}
+
+		_orig->SetStreamSource(first + i, bindBuf, offsets != nullptr ? static_cast<UINT>(offsets[i]) : 0, strides[i]);
 	}
 }
 void reshade::d3d9::device_impl::bind_stream_output_buffers(uint32_t first, uint32_t count, const api::resource *buffers, const uint64_t *offsets, const uint64_t *, const api::resource *, const uint64_t *)
@@ -433,8 +450,21 @@ void reshade::d3d9::device_impl::draw(uint32_t vertex_count, uint32_t instance_c
 	{
 		com_ptr<IDirect3DVertexDeclaration9> decl;
 		_orig->GetVertexDeclaration(&decl);
+		// Unwrap managed stream output VB if it is a proxy
+		IDirect3DVertexBuffer9 *destBuf = _current_stream_output;
+		if (destBuf != nullptr)
+		{
+			com_ptr<IUnknown> proxy_marker;
+			if (SUCCEEDED(destBuf->QueryInterface(IID_DX9EX_MANAGED_PROXY, reinterpret_cast<void **>(&proxy_marker))) && proxy_marker)
+			{
+				reshade::log::message(reshade::log::level::debug, "DX9Ex managed proxy detected for dest buffer %p in command list %s; unwrapping.", destBuf, __FUNCTION__);
+				auto *managed = static_cast<DX9ExManagedVertexBuffer *>(destBuf);
+				managed->SyncIfNeeded();
+				destBuf = managed->GetGpuBuffer();
+			}
+		}
 
-		_orig->ProcessVertices(first_vertex, _current_stream_output_offset, vertex_count, _current_stream_output, decl.get(), 0);
+		_orig->ProcessVertices(first_vertex, _current_stream_output_offset, vertex_count, destBuf, decl.get(), 0);
 		return;
 	}
 
