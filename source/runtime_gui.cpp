@@ -5018,6 +5018,9 @@ void reshade::runtime::destroy_imgui_resources()
 		if (texture_data->Status == ImTextureStatus_WantCreate || texture_data->Status == ImTextureStatus_Destroyed)
 			continue;
 
+		if (_imgui_context->IO.Fonts->TexList.find(texture_data) != _imgui_context->IO.Fonts->TexList.end())
+			continue;
+
 		assert(texture_data->RefCount == 1);
 
 		const auto imgui_srv = api::resource_view { texture_data->GetTexID() };
@@ -5029,9 +5032,6 @@ void reshade::runtime::destroy_imgui_resources()
 		texture_data->SetTexID(ImTextureID_Invalid);
 		texture_data->SetStatus(ImTextureStatus_Destroyed);
 	}
-
-	atlas->TexList.clear_delete();
-	atlas->TexData = nullptr;
 
 	for (size_t i = 0; i < std::size(_imgui_vertices); ++i)
 	{
