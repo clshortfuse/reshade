@@ -105,7 +105,7 @@ static GLuint64 get_resource_import_size(const reshade::api::resource_desc &desc
 					device_create_info.enabledExtensionCount = 1;
 					device_create_info.ppEnabledExtensionNames = &maintenance9_name;
 				}
-				else
+				// else
 #endif
 				{
 					queue_info = { VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO };
