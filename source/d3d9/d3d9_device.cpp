@@ -80,7 +80,12 @@ Direct3DDevice9::Direct3DDevice9(IDirect3DDevice9   *original, bool use_software
 	reshade::invoke_addon_event<reshade::addon_event::init_pipeline_layout>(this, static_cast<uint32_t>(std::size(global_pipeline_layout_params)), global_pipeline_layout_params, _global_pipeline_layout);
 #endif
 
-	on_init();
+	device_impl::on_init();
+
+	reshade::invoke_addon_event<reshade::addon_event::init_command_list>(this);
+	reshade::invoke_addon_event<reshade::addon_event::init_command_queue>(this);
+
+	// Delay initialization of auto depth-stencil until after implicit swap chain proxy was created (see 'Direct3DSwapChain9::Direct3DSwapChain9')
 }
 Direct3DDevice9::Direct3DDevice9(IDirect3DDevice9Ex *original, bool use_software_rendering) :
 	Direct3DDevice9(static_cast<IDirect3DDevice9 *>(original), use_software_rendering)
