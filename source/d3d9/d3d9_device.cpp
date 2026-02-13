@@ -500,7 +500,9 @@ HRESULT STDMETHODCALLTYPE Direct3DDevice9::CreateTexture(UINT Width, UINT Height
 				}
 			}
 		}
-		if ((desc.usage & reshade::api::resource_usage::shader_resource) != 0)
+		if ((desc.usage & reshade::api::resource_usage::shader_resource) != 0 ||
+			// These depth formats support sampling as PCF shadow maps on some GPUs (and thus the resource view handle can occur in 'Direct3DDevice9::SetTexture' below)
+			internal_desc.Format == D3DFMT_D16 || internal_desc.Format == D3DFMT_D24X8)
 		{
 			reshade::invoke_addon_event<reshade::addon_event::init_resource_view>(
 				this,
