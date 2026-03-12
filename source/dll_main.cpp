@@ -366,12 +366,34 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID)
 
 #if RESHADE_ADDON >= 2
 			// It is not safe to call 'LoadLibrary' from 'DllMain', but there are cases where add-ons want to be loaded as early as possible, so at least give the option
-			if (std::vector<std::filesystem::path> addons;
-				true || config.get("ADDON", "LoadFromDllMain", addons))
+			const bool force_load_addons_from_dll_main = !config.has("ADDON", "LoadFromDllMain");
+			std::vector<std::filesystem::path> addons;
+			if (force_load_addons_from_dll_main || config.get("ADDON", "LoadFromDllMain", addons))
 			{
 				std::filesystem::path addon_search_path = g_reshade_base_path;
 				if (config.get("ADDON", "AddonPath", addon_search_path))
 					addon_search_path = g_reshade_base_path / addon_search_path;
+
+				if (force_load_addons_from_dll_main)
+				{
+					std::error_code ec;
+					for (const std::filesystem::path &path : std::filesystem::directory_iterator(addon_search_path, std::filesystem::directory_options::skip_permission_denied, ec))
+					{
+						if (path.extension() != L".addon" &&
+#ifndef _WIN64
+							path.extension() != L".addon32"
+#else
+							path.extension() != L".addon64"
+#endif
+					)
+							continue;
+
+						addons.push_back(path.filename());
+					}
+
+					if (ec)
+						reshade::log::message(reshade::log::level::warning, "Failed to iterate all files in '%s' with error code %d!", addon_search_path.u8string().c_str(), ec.value());
+				}
 
 				for (std::filesystem::path &path : addons)
 				{
