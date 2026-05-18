@@ -277,6 +277,15 @@ namespace reshade::api
 				uint32_t count;
 				const descriptor_range_with_flags *ranges;
 			} descriptor_table_with_flags;
+
+			/// <summary>
+			/// Deprecated alias for <see cref="descriptor_table_with_flags"/>.
+			/// </summary>
+			struct
+			{
+				uint32_t count;
+				const descriptor_range_with_static_samplers *ranges;
+			} descriptor_table_with_static_samplers [[deprecated]];
 		};
 	};
 

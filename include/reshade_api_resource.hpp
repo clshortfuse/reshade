@@ -485,7 +485,11 @@ namespace reshade::api
 				/// Maximum number of mipmap levels for the view of the texture.
 				/// Set to -1 (UINT32_MAX) to indicate that all mipmap levels down to the least detailed should be used.
 				/// </summary>
-				uint32_t levels = UINT32_MAX;
+				union
+				{
+					uint32_t levels = UINT32_MAX;
+					uint32_t level_count [[deprecated]];
+				};
 				/// <summary>
 				/// Index of the first array layer of the texture array to use. This value is ignored if the texture is not layered.
 				/// </summary>
@@ -494,7 +498,11 @@ namespace reshade::api
 				/// Maximum number of array layers for the view of the texture array. This value is ignored if the texture is not layered.
 				/// Set to -1 (UINT32_MAX) to indicate that all array layers should be used.
 				/// </summary>
-				uint32_t layers = UINT32_MAX;
+				union
+				{
+					uint32_t layers = UINT32_MAX;
+					uint32_t layer_count [[deprecated]];
+				};
 			} texture;
 		};
 	};
