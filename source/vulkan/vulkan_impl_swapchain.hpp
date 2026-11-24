@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <vector>
+
 namespace reshade::vulkan
 {
 	class device_impl;
@@ -33,6 +35,7 @@ namespace reshade::vulkan
 		VkSwapchainCreateInfoKHR _create_info = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
 		HWND _hwnd = nullptr;
 		uint32_t _swap_index = 0;
+		std::vector<VkImage> _back_buffers;
 	};
 
 	template <>
@@ -46,6 +49,7 @@ namespace reshade::vulkan
 		using swapchain_impl::_create_info;
 		using swapchain_impl::_hwnd;
 		using swapchain_impl::_swap_index;
+		using swapchain_impl::_back_buffers;
 
 #if VK_EXT_full_screen_exclusive
 		HMONITOR hmonitor = nullptr;

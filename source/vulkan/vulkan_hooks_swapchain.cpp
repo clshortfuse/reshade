@@ -289,17 +289,12 @@ VkResult VKAPI_CALL vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreat
 		// Reuse the existing effect runtime if this swap chain was not created from scratch, but reset it before initializing again below
 		reshade::reset_effect_runtime(swapchain_impl);
 
-		// Get back buffer images of old swap chain
-		uint32_t num_images = 0;
-		vk.GetSwapchainImagesKHR(device, swapchain_impl->_orig, &num_images, nullptr);
-		temp_mem<VkImage, 3> swapchain_images(num_images);
-		vk.GetSwapchainImagesKHR(device, swapchain_impl->_orig, &num_images, swapchain_images.p);
-
 #if RESHADE_ADDON
 		reshade::invoke_addon_event<reshade::addon_event::destroy_swapchain>(swapchain_impl, false);
 #endif
 
-		for (uint32_t i = 0; i < num_images; ++i)
+		const auto &swapchain_images = swapchain_impl->_back_buffers;
+		for (uint32_t i = 0; i < swapchain_images.size(); ++i)
 		{
 #if RESHADE_ADDON
 			destroy_default_view(device_impl, swapchain_images[i]);
@@ -327,11 +322,20 @@ VkResult VKAPI_CALL vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreat
 
 	device_impl->register_object<VK_OBJECT_TYPE_SWAPCHAIN_KHR>(swapchain_impl->_orig, swapchain_impl);
 
-	// Get back buffer images of new swap chain
+	// Cache the images for this swap chain before notifying add-ons or initializing the runtime.
+	auto &swapchain_images = swapchain_impl->_back_buffers;
 	uint32_t num_images = 0;
-	vk.GetSwapchainImagesKHR(device, swapchain_impl->_orig, &num_images, nullptr);
-	temp_mem<VkImage, 3> swapchain_images(num_images);
-	vk.GetSwapchainImagesKHR(device, swapchain_impl->_orig, &num_images, swapchain_images.p);
+	VkResult image_result = vk.GetSwapchainImagesKHR(device, *pSwapchain, &num_images, nullptr);
+	if (image_result == VK_SUCCESS && num_images != 0)
+	{
+		swapchain_images.resize(num_images);
+		image_result = vk.GetSwapchainImagesKHR(device, *pSwapchain, &num_images, swapchain_images.data());
+	}
+	num_images = image_result == VK_SUCCESS ? num_images : 0;
+	swapchain_images.resize(num_images);
+
+	if (swapchain_images.empty())
+		reshade::log::message(reshade::log::level::warning, "Failed to enumerate Vulkan swap chain images (result %d).", static_cast<int>(image_result));
 
 	// Add swap chain images to the image list
 	for (uint32_t i = 0; i < num_images; ++i)
@@ -378,7 +382,8 @@ VkResult VKAPI_CALL vkCreateSwapchainKHR(VkDevice device, const VkSwapchainCreat
 #endif
 #endif
 
-	reshade::init_effect_runtime(swapchain_impl);
+	if (!swapchain_images.empty())
+		reshade::init_effect_runtime(swapchain_impl);
 
 #if RESHADE_VERBOSE_LOG
 	reshade::log::message(reshade::log::level::debug, "Returning Vulkan swap chain %p.", *pSwapchain);
@@ -401,17 +406,12 @@ void     VKAPI_CALL vkDestroySwapchainKHR(VkDevice device, VkSwapchainKHR swapch
 	{
 		reshade::reset_effect_runtime(swapchain_impl);
 
-		// Get back buffer images of old swap chain
-		uint32_t num_images = 0;
-		vk.GetSwapchainImagesKHR(device, swapchain, &num_images, nullptr);
-		temp_mem<VkImage, 3> swapchain_images(num_images);
-		vk.GetSwapchainImagesKHR(device, swapchain, &num_images, swapchain_images.p);
-
 #if RESHADE_ADDON
 		reshade::invoke_addon_event<reshade::addon_event::destroy_swapchain>(swapchain_impl, false);
 #endif
 
-		for (uint32_t i = 0; i < num_images; ++i)
+		const auto &swapchain_images = swapchain_impl->_back_buffers;
+		for (uint32_t i = 0; i < swapchain_images.size(); ++i)
 		{
 #if RESHADE_ADDON
 			destroy_default_view(device_impl, swapchain_images[i]);
